@@ -53,19 +53,19 @@ export interface AsciiFrame {
   rows: number;
 }
 
-// Courier New char width/height ratio ≈ 0.6 → height = width / 0.6
-const CHAR_ASPECT = 0.6;
+// Monospace char: height ≈ 2× width in most fonts
+const CHAR_ASPECT = 0.5;
 
 export const DEFAULT_OPTIONS: AsciiOptions = {
-  width: 180,
-  charset: 'detailed',
+  width: 220,
+  charset: 'ascii_magic',
   customRamp: '@%#*+=-:. ',
   invert: false,
   color: true,
   brightness: 0,
-  contrast: 15,
+  contrast: 10,
   saturation: 20,
-  colorEnhance: 30,
+  colorEnhance: 20,
   blur: 0,
   edges: false,
   edgeThreshold: 60,

@@ -76,11 +76,8 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
       ctx.clearRect(0, 0, cssW, cssH);
 
     } else if (options.bgMode === 'original' && src) {
-      // Draw image dimmed — chars need to stand out over it
+      // Full image, no dimming — chars create contrast by themselves
       ctx.drawImage(src, 0, 0, cssW, cssH);
-      // Darkening overlay so chars are visible (ascii-magic technique)
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(0, 0, cssW, cssH);
 
     } else if (options.bgMode === 'blurred' && src) {
       ctx.save();
@@ -88,8 +85,6 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
       const pad = options.bgBlur * 2;
       ctx.drawImage(src, -pad, -pad, cssW + pad * 2, cssH + pad * 2);
       ctx.restore();
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(0, 0, cssW, cssH);
 
     } else {
       ctx.fillStyle = options.bgColor;
@@ -114,11 +109,7 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            // Boost brightness of char color so it pops over dimmed bg
-            const r = Math.min(255, Math.round(c.r * 1.3));
-            const g = Math.min(255, Math.round(c.g * 1.3));
-            const b = Math.min(255, Math.round(c.b * 1.3));
-            const color = `rgb(${r},${g},${b})`;
+            const color = `rgb(${c.r},${c.g},${c.b})`;
             if (color !== currentColor) { ctx.fillStyle = color; currentColor = color; }
             ctx.fillText(c.char, x * cellW, y * cellH);
           }
