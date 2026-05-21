@@ -10,31 +10,32 @@ interface Props {
 export function AsciiViewer({ frame, options, sourceEl }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const sourceRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
-
-  // Keep sourceRef updated even though sourceEl doesn't trigger re-render
   if (sourceEl) sourceRef.current = sourceEl;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const isTransparent = options.bgMode === 'transparent';
-    const ctx = canvas.getContext('2d', { alpha: isTransparent });
+    const ctx = canvas.getContext('2d', { alpha: options.bgMode === 'transparent' });
     if (!ctx) return;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const fontSize = options.fontSize;
+    const src = sourceRef.current;
 
+    // ── IDLE STATE ───────────────────────────────────────
     if (!frame) {
       const w = Math.max(1, canvas.clientWidth || 320);
       const h = Math.max(1, canvas.clientHeight || 240);
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = options.bgColor;
       ctx.fillRect(0, 0, w, h);
       ctx.fillStyle = options.fgColor;
       ctx.globalAlpha = 0.32;
-      ctx.font = '13px -apple-system, "SF Pro Text", Inter, system-ui, sans-serif';
+      ctx.font = '13px -apple-system, system-ui, sans-serif';
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'center';
       ctx.fillText('Awaiting input', w / 2, h / 2);
@@ -42,11 +43,29 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
       return;
     }
 
-    const charW = fontSize * 0.6;
-    const lineH = fontSize;
-    const padding = 0; // No padding for overlay — fills edge to edge
-    const cssW = frame.cols * charW + padding * 2;
-    const cssH = frame.rows * lineH + padding * 2;
+    const isOverlay = options.bgMode === 'original' || options.bgMode === 'blurred';
+
+    // ── CANVAS SIZE ──────────────────────────────────────
+    // Overlay: use source image dimensions so image fills perfectly
+    // Classic: derive from grid + font size
+    let cssW: number, cssH: number;
+
+    if (isOverlay && src) {
+      const srcW = src instanceof HTMLImageElement
+        ? (src.naturalWidth || src.width)
+        : (src as HTMLVideoElement).videoWidth;
+      const srcH = src instanceof HTMLImageElement
+        ? (src.naturalHeight || src.height)
+        : (src as HTMLVideoElement).videoHeight;
+      cssW = srcW;
+      cssH = srcH;
+    } else {
+      const charW = fontSize * 0.6;
+      const lineH = fontSize;
+      const padding = 12;
+      cssW = frame.cols * charW + padding * 2;
+      cssH = frame.rows * lineH + padding * 2;
+    }
 
     canvas.width = Math.max(1, Math.floor(cssW * dpr));
     canvas.height = Math.max(1, Math.floor(cssH * dpr));
@@ -54,22 +73,19 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
     canvas.style.height = `${cssH}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const src = sourceRef.current;
-
     // ── BACKGROUND ──────────────────────────────────────
-    if (isTransparent) {
+    if (options.bgMode === 'transparent') {
       ctx.clearRect(0, 0, cssW, cssH);
     } else if (options.bgMode === 'original' && src) {
-      // Draw original image stretched to fill — this is the viral effect
       ctx.globalAlpha = options.bgOpacity / 100;
       ctx.drawImage(src, 0, 0, cssW, cssH);
       ctx.globalAlpha = 1;
     } else if (options.bgMode === 'blurred' && src) {
       ctx.save();
-      ctx.filter = `blur(${options.bgBlur}px)`;
+      const blurPx = options.bgBlur;
+      ctx.filter = `blur(${blurPx}px)`;
       ctx.globalAlpha = options.bgOpacity / 100;
-      // Draw larger to avoid blur edge artifacts
-      const pad = options.bgBlur * 2;
+      const pad = blurPx * 2;
       ctx.drawImage(src, -pad, -pad, cssW + pad * 2, cssH + pad * 2);
       ctx.restore();
       ctx.globalAlpha = 1;
@@ -81,27 +97,56 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
     }
 
     // ── ASCII CHARS ──────────────────────────────────────
-    ctx.font = `${fontSize}px "Share Tech Mono", "SF Mono", ui-monospace, Menlo, monospace`;
-    ctx.textBaseline = 'top';
+    if (isOverlay && src) {
+      // Overlay mode: each char maps to a proportional cell of the canvas
+      const cellW = cssW / frame.cols;
+      const cellH = cssH / frame.rows;
+      const fs = Math.max(4, Math.min(cellW, cellH) * 0.85);
+      ctx.font = `${fs}px "Share Tech Mono", "SF Mono", ui-monospace, Menlo, monospace`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
 
-    if (frame.cells) {
-      let currentColor = '';
-      for (let y = 0; y < frame.cells.length; y++) {
-        const row = frame.cells[y];
-        const py = padding + y * lineH;
-        for (let x = 0; x < row.length; x++) {
-          const c = row[x];
-          if (c.char === ' ') continue;
-          const color = `rgb(${c.r},${c.g},${c.b})`;
-          if (color !== currentColor) { ctx.fillStyle = color; currentColor = color; }
-          ctx.fillText(c.char, padding + x * charW, py);
+      if (frame.cells) {
+        let currentColor = '';
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const color = `rgb(${c.r},${c.g},${c.b})`;
+            if (color !== currentColor) { ctx.fillStyle = color; currentColor = color; }
+            ctx.fillText(c.char, x * cellW, y * cellH + cellH * 0.5);
+          }
         }
       }
     } else {
-      ctx.fillStyle = options.fgColor;
-      const lines = frame.text.split('\n');
-      for (let y = 0; y < lines.length; y++) {
-        ctx.fillText(lines[y], padding, padding + y * lineH);
+      // Classic mode
+      const charW = fontSize * 0.6;
+      const lineH = fontSize;
+      const padding = 12;
+      ctx.font = `${fontSize}px "Share Tech Mono", "SF Mono", ui-monospace, Menlo, monospace`;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+
+      if (frame.cells) {
+        let currentColor = '';
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          const py = padding + y * lineH;
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const color = `rgb(${c.r},${c.g},${c.b})`;
+            if (color !== currentColor) { ctx.fillStyle = color; currentColor = color; }
+            ctx.fillText(c.char, padding + x * charW, py);
+          }
+        }
+      } else {
+        ctx.fillStyle = options.fgColor;
+        const lines = frame.text.split('\n');
+        for (let y = 0; y < lines.length; y++) {
+          ctx.fillText(lines[y], 12, 12 + y * lineH);
+        }
       }
     }
 
@@ -110,12 +155,14 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
 
   }, [frame, options, sourceEl]);
 
+  const bgStyle = options.bgMode === 'transparent'
+    ? 'transparent'
+    : (options.bgMode === 'original' || options.bgMode === 'blurred') ? '#000' : options.bgColor;
+
   return (
-    <div
-      className="h-full w-full overflow-auto rounded-2xl"
-      style={{ background: options.bgMode === 'transparent' ? 'transparent' : options.bgMode === 'original' || options.bgMode === 'blurred' ? '#000' : options.bgColor }}
-    >
-      <canvas ref={canvasRef} className="block" style={{ minWidth: '100%', minHeight: '100%' }} />
+    <div className="h-full w-full overflow-auto rounded-2xl flex items-center justify-center"
+      style={{ background: bgStyle }}>
+      <canvas ref={canvasRef} className="block max-w-full max-h-full object-contain" />
     </div>
   );
 }

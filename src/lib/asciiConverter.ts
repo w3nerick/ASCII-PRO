@@ -56,15 +56,15 @@ export interface AsciiFrame {
 const CHAR_ASPECT = 0.5;
 
 export const DEFAULT_OPTIONS: AsciiOptions = {
-  width: 120,
+  width: 180,
   charset: 'detailed',
   customRamp: '@%#*+=-:. ',
   invert: false,
   color: true,
-  brightness: 5,
-  contrast: 20,
-  saturation: 30,
-  colorEnhance: 40,
+  brightness: 0,
+  contrast: 15,
+  saturation: 20,
+  colorEnhance: 30,
   blur: 0,
   edges: false,
   edgeThreshold: 60,
