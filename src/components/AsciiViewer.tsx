@@ -21,6 +21,7 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const fontSize = options.fontSize;
     const src = sourceRef.current;
+    const isOverlay = options.bgMode === 'original' || options.bgMode === 'blurred';
 
     // ── IDLE STATE ───────────────────────────────────────
     if (!frame) {
@@ -43,11 +44,7 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
       return;
     }
 
-    const isOverlay = options.bgMode === 'original' || options.bgMode === 'blurred';
-
     // ── CANVAS SIZE ──────────────────────────────────────
-    // Overlay: use source image dimensions so image fills perfectly
-    // Classic: derive from grid + font size
     let cssW: number, cssH: number;
 
     if (isOverlay && src) {
@@ -57,8 +54,9 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
       const srcH = src instanceof HTMLImageElement
         ? (src.naturalHeight || src.height)
         : (src as HTMLVideoElement).videoHeight;
-      cssW = srcW;
-      cssH = srcH;
+      // Fallback for webcam that hasn't loaded dimensions yet
+      cssW = srcW > 0 ? srcW : frame.cols * 8;
+      cssH = srcH > 0 ? srcH : frame.rows * 14;
     } else {
       const charW = fontSize * 0.6;
       const lineH = fontSize;
@@ -76,41 +74,36 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
     // ── BACKGROUND ──────────────────────────────────────
     if (options.bgMode === 'transparent') {
       ctx.clearRect(0, 0, cssW, cssH);
+
     } else if (options.bgMode === 'original' && src) {
-      ctx.globalAlpha = options.bgOpacity / 100;
+      // Draw image dimmed — chars need to stand out over it
       ctx.drawImage(src, 0, 0, cssW, cssH);
-      ctx.globalAlpha = 1;
+      // Darkening overlay so chars are visible (ascii-magic technique)
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0, 0, cssW, cssH);
+
     } else if (options.bgMode === 'blurred' && src) {
       ctx.save();
-      const blurPx = options.bgBlur;
-      ctx.filter = `blur(${blurPx}px)`;
-      ctx.globalAlpha = options.bgOpacity / 100;
-      const pad = blurPx * 2;
+      ctx.filter = `blur(${options.bgBlur}px)`;
+      const pad = options.bgBlur * 2;
       ctx.drawImage(src, -pad, -pad, cssW + pad * 2, cssH + pad * 2);
       ctx.restore();
-      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(0, 0, cssW, cssH);
+
     } else {
-      ctx.globalAlpha = options.bgOpacity / 100;
       ctx.fillStyle = options.bgColor;
       ctx.fillRect(0, 0, cssW, cssH);
-      ctx.globalAlpha = 1;
     }
 
     // ── ASCII CHARS ──────────────────────────────────────
     if (isOverlay && src) {
-      // cellW/cellH = exact pixel size of each character cell on the canvas
       const cellW = cssW / frame.cols;
       const cellH = cssH / frame.rows;
-
-      // Find font size that makes char fill cellW exactly.
-      // Monospace chars: width ≈ fontSize * 0.6  →  fontSize = cellW / 0.6
-      // But we also cap by cellH so chars don't overflow vertically.
-      const fsByWidth = cellW / 0.6;
-      const fsByHeight = cellH;
-      const fs = Math.max(2, Math.min(fsByWidth, fsByHeight) * 0.98);
-
-      const fontStr = `${fs}px "Courier New", Courier, monospace`;
-      ctx.font = fontStr;
+      // Font fills each cell: width = fontSize * 0.6 → fontSize = cellW / 0.6
+      // Cap by cellH so chars don't overflow row height
+      const fs = Math.max(2, Math.min(cellW / 0.6, cellH));
+      ctx.font = `${fs}px "Courier New", Courier, monospace`;
       ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
 
@@ -121,12 +114,17 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const color = `rgb(${c.r},${c.g},${c.b})`;
+            // Boost brightness of char color so it pops over dimmed bg
+            const r = Math.min(255, Math.round(c.r * 1.3));
+            const g = Math.min(255, Math.round(c.g * 1.3));
+            const b = Math.min(255, Math.round(c.b * 1.3));
+            const color = `rgb(${r},${g},${b})`;
             if (color !== currentColor) { ctx.fillStyle = color; currentColor = color; }
             ctx.fillText(c.char, x * cellW, y * cellH);
           }
         }
       }
+
     } else {
       // Classic mode
       const charW = fontSize * 0.6;
@@ -175,7 +173,6 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
   );
 }
 
-// ── POST-FX PIPELINE ────────────────────────────────────
 function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: AsciiOptions) {
   if (o.fx_bloom) {
     const intensity = o.fx_bloom_intensity / 100;
@@ -186,7 +183,6 @@ function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: Asc
     ctx.drawImage(ctx.canvas, 0, 0);
     ctx.restore();
   }
-
   if (o.fx_chromatic) {
     const px = o.fx_chromatic_px;
     ctx.save();
@@ -196,56 +192,41 @@ function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: Asc
     ctx.drawImage(ctx.canvas, px, 0);
     ctx.restore();
   }
-
   if (o.fx_scanlines) {
     const alpha = o.fx_scanlines_intensity / 200;
     ctx.save();
-    ctx.fillStyle = '#000000';
-    for (let y = 0; y < h; y += 2) {
-      ctx.globalAlpha = alpha;
-      ctx.fillRect(0, y, w, 1);
-    }
+    ctx.fillStyle = '#000';
+    for (let y = 0; y < h; y += 2) { ctx.globalAlpha = alpha; ctx.fillRect(0, y, w, 1); }
     ctx.restore();
   }
-
   if (o.fx_vignette) {
     const intensity = o.fx_vignette_intensity / 100;
     ctx.save();
-    const grad = ctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.3, w/2, h/2, Math.max(w,h)*0.75);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, `rgba(0,0,0,${(intensity*0.85).toFixed(2)})`);
-    ctx.fillStyle = grad;
-    ctx.globalAlpha = 1;
-    ctx.fillRect(0, 0, w, h);
+    const grad = ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.3,w/2,h/2,Math.max(w,h)*0.75);
+    grad.addColorStop(0,'rgba(0,0,0,0)');
+    grad.addColorStop(1,`rgba(0,0,0,${(intensity*0.85).toFixed(2)})`);
+    ctx.fillStyle = grad; ctx.globalAlpha = 1; ctx.fillRect(0,0,w,h);
     ctx.restore();
   }
-
   if (o.fx_grain) {
     const intensity = o.fx_grain_intensity / 100;
     ctx.save();
-    const imageData = ctx.createImageData(w, h);
-    const data = imageData.data;
-    for (let i = 0; i < data.length; i += 4) {
-      const noise = (Math.random() - 0.5) * 255 * intensity * 0.6;
-      data[i] = data[i+1] = data[i+2] = 128 + noise;
-      data[i+3] = Math.round(intensity * 60);
+    const id = ctx.createImageData(w, h);
+    const d = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const n = (Math.random()-0.5)*255*intensity*0.6;
+      d[i]=d[i+1]=d[i+2]=128+n; d[i+3]=Math.round(intensity*60);
     }
-    ctx.putImageData(imageData, 0, 0);
-    ctx.restore();
+    ctx.putImageData(id, 0, 0); ctx.restore();
   }
-
-  if (o.fx_glitch && Math.random() < o.fx_glitch_intensity / 100) {
+  if (o.fx_glitch && Math.random() < o.fx_glitch_intensity/100) {
     ctx.save();
-    const slices = Math.floor(2 + o.fx_glitch_intensity / 20);
-    for (let i = 0; i < slices; i++) {
-      const y = Math.floor(Math.random() * h);
-      const sliceH = Math.floor(2 + Math.random() * 12);
-      const shift = Math.floor((Math.random() - 0.5) * o.fx_glitch_intensity * 0.5);
-      const imgData = ctx.getImageData(0, y, w, sliceH);
-      ctx.putImageData(imgData, shift, y);
-      ctx.globalAlpha = 0.3;
-      ctx.fillStyle = Math.random() > 0.5 ? '#00ffff' : '#ff00ff';
-      ctx.fillRect(shift, y, w, sliceH);
+    for (let i = 0; i < Math.floor(2+o.fx_glitch_intensity/20); i++) {
+      const y=Math.floor(Math.random()*h), sh=Math.floor(2+Math.random()*12);
+      const shift=Math.floor((Math.random()-0.5)*o.fx_glitch_intensity*0.5);
+      const d=ctx.getImageData(0,y,w,sh); ctx.putImageData(d,shift,y);
+      ctx.globalAlpha=0.3; ctx.fillStyle=Math.random()>0.5?'#0ff':'#f0f';
+      ctx.fillRect(shift,y,w,sh);
     }
     ctx.restore();
   }
