@@ -23,7 +23,13 @@ export interface AsciiOptions {
   // Background mode
   bgMode: 'solid' | 'blurred' | 'original' | 'transparent';
   bgBlur: number;       // 0..60 px — only for 'blurred' mode
-  bgOpacity: number;    // 0..100
+  bgOpacity: number;    // 0..100  — image opacity behind chars
+  // Character overlay
+  charOpacity: number;  // 0..100 — opacity of chars over image
+  coverage: number;     // 0..100 — % of cells that render a char
+  // Animation
+  animatedAscii: boolean;
+  animSpeed: number;    // 1..10
   // Post-FX (applied on canvas after ASCII render)
   fx_scanlines: boolean;
   fx_scanlines_intensity: number;   // 0..100
@@ -76,7 +82,11 @@ export const DEFAULT_OPTIONS: AsciiOptions = {
   fgColor: '#ffffff',
   bgMode: 'original',
   bgBlur: 0,
-  bgOpacity: 100,
+  bgOpacity: 90,
+  charOpacity: 100,
+  coverage: 85,
+  animatedAscii: false,
+  animSpeed: 3,
   fx_scanlines: false,
   fx_scanlines_intensity: 40,
   fx_vignette: false,
@@ -111,6 +121,7 @@ export function conversionKey(o: AsciiOptions): string {
     o.edges ? 1 : 0,
     o.edges ? o.edgeThreshold : 0,
     o.dithering ? 1 : 0,
+    o.coverage,
     o.density,
   ].join('|');
 }
@@ -274,8 +285,11 @@ export function sourceToAscii(
       const p = y * cols + x;
       let v = work[p];
       if (v < 0) v = 0; else if (v > 1) v = 1;
+      // Coverage: skip very bright pixels (they'd be space anyway)
+      const coverageThreshold = options.coverage / 100;
+      const skipCell = v > coverageThreshold;
       const idx = (1 - v) * rampLast + 0.5;
-      const ch = ramp[idx | 0] ?? ' ';
+      const ch = skipCell ? ' ' : (ramp[idx | 0] ?? ' ');
       charBuf[x] = ch;
       if (row) {
         const i = p * 4;
