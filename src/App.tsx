@@ -29,21 +29,21 @@ export default function App() {
   useKeyboardShortcuts(shortcuts);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#111]">
+    <div className="flex flex-col" style={{ height: '100vh', background: 'var(--bg)', overflow: 'hidden' }}>
       <Header onHelp={() => setHelp(true)} />
 
-      {/* Main layout: stage (flexible) + control panel (fixed right) */}
-      <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 52px)' }}>
-
-        {/* Stage area — takes all remaining space */}
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden p-3 gap-2">
+      <div className="flex flex-1 min-h-0">
+        {/* ── Canvas Stage ── */}
+        <div className="flex flex-col flex-1 min-w-0 p-3 gap-2">
           <MediaStage ref={stageRef} options={options} onFrame={setFrame} />
           <ExportBar frame={frame} options={options} />
         </div>
 
-        {/* Right panel — fixed 280px, dark, scrollable */}
-        <div className="w-[280px] shrink-0 border-l border-white/8 overflow-hidden flex flex-col"
-          style={{ background: '#1a1a1a' }}>
+        {/* ── Right Panel ── */}
+        <div
+          className="shrink-0 border-l border-separator flex flex-col overflow-hidden"
+          style={{ width: 272, background: 'var(--bg-elevated)' }}
+        >
           <ControlPanel
             options={options}
             onChange={setOptions}
