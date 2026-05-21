@@ -68,6 +68,7 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
   const [fullscreen, setFullscreen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
+  const [sourceEl, setSourceEl] = useState<HTMLImageElement | HTMLVideoElement | null>(null);
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -187,6 +188,7 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
       videoRef.current = null;
     }
     imgRef.current = null;
+    setSourceEl(null);
     setMode('idle');
   };
 
@@ -198,6 +200,7 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
       if (kind === 'image') {
         const img = await loadImageFromFile(file);
         imgRef.current = img;
+        setSourceEl(img);
         setMode('image');
         const f = imageToAscii(img, optionsRef.current);
         lastConvKey.current = conversionKey(optionsRef.current);
@@ -205,6 +208,7 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
       } else {
         const video = await loadVideoFromFile(file);
         videoRef.current = video;
+        setSourceEl(video);
         setMode('video');
         await video.play().catch(() => {});
         setPlaying(!video.paused);
@@ -221,6 +225,7 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
     try {
       const demoImg = img ?? (await generateDemoImage());
       imgRef.current = demoImg;
+      setSourceEl(demoImg);
       setMode('image');
       const f = imageToAscii(demoImg, optionsRef.current);
       lastConvKey.current = conversionKey(optionsRef.current);
@@ -238,6 +243,7 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
       v.muted = true; v.playsInline = true; v.srcObject = stream;
       await v.play();
       videoRef.current = v;
+      setSourceEl(v);
       setMode('webcam');
       setPlaying(true);
     } catch {
@@ -384,7 +390,7 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
             <AsciiViewer
               frame={frame}
               options={options}
-              sourceEl={imgRef.current ?? videoRef.current}
+              sourceEl={sourceEl}
             />
           </div>
         </div>

@@ -4,17 +4,21 @@ import type { AsciiFrame, AsciiOptions } from '../lib/asciiConverter';
 interface Props {
   frame: AsciiFrame | null;
   options: AsciiOptions;
-  /** Original source for bgMode blurred/original */
   sourceEl?: HTMLImageElement | HTMLVideoElement | null;
 }
 
 export function AsciiViewer({ frame, options, sourceEl }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const sourceRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
+
+  // Keep sourceRef updated even though sourceEl doesn't trigger re-render
+  if (sourceEl) sourceRef.current = sourceEl;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d', { alpha: options.bgMode === 'transparent' });
+    const isTransparent = options.bgMode === 'transparent';
+    const ctx = canvas.getContext('2d', { alpha: isTransparent });
     if (!ctx) return;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -40,7 +44,7 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
 
     const charW = fontSize * 0.6;
     const lineH = fontSize;
-    const padding = 12;
+    const padding = 0; // No padding for overlay — fills edge to edge
     const cssW = frame.cols * charW + padding * 2;
     const cssH = frame.rows * lineH + padding * 2;
 
@@ -50,18 +54,27 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
     canvas.style.height = `${cssH}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    const src = sourceRef.current;
+
     // ── BACKGROUND ──────────────────────────────────────
-    const bgAlpha = options.bgOpacity / 100;
-    if (options.bgMode === 'transparent') {
+    if (isTransparent) {
       ctx.clearRect(0, 0, cssW, cssH);
-    } else if ((options.bgMode === 'blurred' || options.bgMode === 'original') && sourceEl) {
+    } else if (options.bgMode === 'original' && src) {
+      // Draw original image stretched to fill — this is the viral effect
+      ctx.globalAlpha = options.bgOpacity / 100;
+      ctx.drawImage(src, 0, 0, cssW, cssH);
+      ctx.globalAlpha = 1;
+    } else if (options.bgMode === 'blurred' && src) {
       ctx.save();
-      if (options.bgMode === 'blurred') ctx.filter = `blur(${options.bgBlur}px)`;
-      ctx.globalAlpha = bgAlpha;
-      ctx.drawImage(sourceEl, 0, 0, cssW, cssH);
+      ctx.filter = `blur(${options.bgBlur}px)`;
+      ctx.globalAlpha = options.bgOpacity / 100;
+      // Draw larger to avoid blur edge artifacts
+      const pad = options.bgBlur * 2;
+      ctx.drawImage(src, -pad, -pad, cssW + pad * 2, cssH + pad * 2);
       ctx.restore();
+      ctx.globalAlpha = 1;
     } else {
-      ctx.globalAlpha = bgAlpha;
+      ctx.globalAlpha = options.bgOpacity / 100;
       ctx.fillStyle = options.bgColor;
       ctx.fillRect(0, 0, cssW, cssH);
       ctx.globalAlpha = 1;
@@ -70,7 +83,6 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
     // ── ASCII CHARS ──────────────────────────────────────
     ctx.font = `${fontSize}px "Share Tech Mono", "SF Mono", ui-monospace, Menlo, monospace`;
     ctx.textBaseline = 'top';
-    ctx.globalAlpha = 1;
 
     if (frame.cells) {
       let currentColor = '';
@@ -101,7 +113,7 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
   return (
     <div
       className="h-full w-full overflow-auto rounded-2xl"
-      style={{ background: options.bgMode === 'transparent' ? 'transparent' : options.bgColor }}
+      style={{ background: options.bgMode === 'transparent' ? 'transparent' : options.bgMode === 'original' || options.bgMode === 'blurred' ? '#000' : options.bgColor }}
     >
       <canvas ref={canvasRef} className="block" style={{ minWidth: '100%', minHeight: '100%' }} />
     </div>
@@ -110,7 +122,6 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
 
 // ── POST-FX PIPELINE ────────────────────────────────────
 function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: AsciiOptions) {
-  // Bloom — glow via shadow blur trick
   if (o.fx_bloom) {
     const intensity = o.fx_bloom_intensity / 100;
     ctx.save();
@@ -121,29 +132,16 @@ function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: Asc
     ctx.restore();
   }
 
-  // Chromatic aberration — shift R and B channels
   if (o.fx_chromatic) {
     const px = o.fx_chromatic_px;
     ctx.save();
-    ctx.globalAlpha = 0.45;
     ctx.globalCompositeOperation = 'screen';
-    // Red channel shift left
-    const tmpR = document.createElement('canvas');
-    tmpR.width = w; tmpR.height = h;
-    const rCtx = tmpR.getContext('2d')!;
-    rCtx.drawImage(ctx.canvas, 0, 0);
-    // Use multiply for red
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = '#ff0000'; ctx.globalAlpha = 0.18;
-    ctx.fillRect(0, 0, w, h);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 0.3;
-    ctx.drawImage(tmpR, -px, 0);  // red left
-    ctx.drawImage(tmpR, px, 0);   // blue right (approx)
+    ctx.globalAlpha = 0.25;
+    ctx.drawImage(ctx.canvas, -px, 0);
+    ctx.drawImage(ctx.canvas, px, 0);
     ctx.restore();
   }
 
-  // Scanlines
   if (o.fx_scanlines) {
     const alpha = o.fx_scanlines_intensity / 200;
     ctx.save();
@@ -155,20 +153,18 @@ function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: Asc
     ctx.restore();
   }
 
-  // Vignette
   if (o.fx_vignette) {
     const intensity = o.fx_vignette_intensity / 100;
     ctx.save();
-    const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.75);
+    const grad = ctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.3, w/2, h/2, Math.max(w,h)*0.75);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, `rgba(0,0,0,${(intensity * 0.85).toFixed(2)})`);
+    grad.addColorStop(1, `rgba(0,0,0,${(intensity*0.85).toFixed(2)})`);
     ctx.fillStyle = grad;
     ctx.globalAlpha = 1;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
   }
 
-  // Film grain
   if (o.fx_grain) {
     const intensity = o.fx_grain_intensity / 100;
     ctx.save();
@@ -176,14 +172,13 @@ function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: Asc
     const data = imageData.data;
     for (let i = 0; i < data.length; i += 4) {
       const noise = (Math.random() - 0.5) * 255 * intensity * 0.6;
-      data[i] = data[i + 1] = data[i + 2] = 128 + noise;
-      data[i + 3] = Math.round(intensity * 60);
+      data[i] = data[i+1] = data[i+2] = 128 + noise;
+      data[i+3] = Math.round(intensity * 60);
     }
     ctx.putImageData(imageData, 0, 0);
     ctx.restore();
   }
 
-  // Glitch — random horizontal slice shifts
   if (o.fx_glitch && Math.random() < o.fx_glitch_intensity / 100) {
     ctx.save();
     const slices = Math.floor(2 + o.fx_glitch_intensity / 20);
@@ -193,7 +188,6 @@ function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: Asc
       const shift = Math.floor((Math.random() - 0.5) * o.fx_glitch_intensity * 0.5);
       const imgData = ctx.getImageData(0, y, w, sliceH);
       ctx.putImageData(imgData, shift, y);
-      // Color tint on glitch slice
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = Math.random() > 0.5 ? '#00ffff' : '#ff00ff';
       ctx.fillRect(shift, y, w, sliceH);
