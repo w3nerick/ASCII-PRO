@@ -98,12 +98,20 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
 
     // ── ASCII CHARS ──────────────────────────────────────
     if (isOverlay && src) {
-      // Overlay mode: each char maps to a proportional cell of the canvas
+      // cellW/cellH = exact pixel size of each character cell on the canvas
       const cellW = cssW / frame.cols;
       const cellH = cssH / frame.rows;
-      const fs = Math.max(4, Math.min(cellW, cellH) * 0.85);
-      ctx.font = `${fs}px "Share Tech Mono", "SF Mono", ui-monospace, Menlo, monospace`;
-      ctx.textBaseline = 'middle';
+
+      // Find font size that makes char fill cellW exactly.
+      // Monospace chars: width ≈ fontSize * 0.6  →  fontSize = cellW / 0.6
+      // But we also cap by cellH so chars don't overflow vertically.
+      const fsByWidth = cellW / 0.6;
+      const fsByHeight = cellH;
+      const fs = Math.max(2, Math.min(fsByWidth, fsByHeight) * 0.98);
+
+      const fontStr = `${fs}px "Courier New", Courier, monospace`;
+      ctx.font = fontStr;
+      ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
 
       if (frame.cells) {
@@ -115,7 +123,7 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
             if (c.char === ' ') continue;
             const color = `rgb(${c.r},${c.g},${c.b})`;
             if (color !== currentColor) { ctx.fillStyle = color; currentColor = color; }
-            ctx.fillText(c.char, x * cellW, y * cellH + cellH * 0.5);
+            ctx.fillText(c.char, x * cellW, y * cellH);
           }
         }
       }

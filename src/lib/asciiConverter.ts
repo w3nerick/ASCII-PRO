@@ -53,7 +53,8 @@ export interface AsciiFrame {
   rows: number;
 }
 
-const CHAR_ASPECT = 0.5;
+// Courier New char width/height ratio ≈ 0.6 → height = width / 0.6
+const CHAR_ASPECT = 0.6;
 
 export const DEFAULT_OPTIONS: AsciiOptions = {
   width: 180,
