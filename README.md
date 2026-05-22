@@ -2,7 +2,7 @@
 
 > Cyberpunk-styled ASCII art generator for images, videos and webcam streams. 100% client-side.
 
-Inspired by [ascii-magic.com](https://www.ascii-magic.com/), reimagined with a Neo-Tokyo aesthetic: neon glow, scanlines, glitch text, and `Share Tech Mono`.
+Inspired by ASCII, reimagined with a Neo-Tokyo aesthetic: neon glow, scanlines, glitch text, and `Share Tech Mono`.
 
 ## Deploy
 
