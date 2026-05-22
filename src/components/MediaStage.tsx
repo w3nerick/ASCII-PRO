@@ -312,7 +312,7 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
       ) : (
         <div
           ref={stageRef}
-          className="ascii-stage flex flex-col flex-1 min-h-[420px] shadow-card scale-in"
+          className="ascii-stage flex flex-col flex-1 min-h-0 md:min-h-[420px] shadow-card scale-in"
           style={fullscreen ? { background: options.bgColor, borderRadius: 0 } : undefined}
         >
           {/* Stage toolbar */}

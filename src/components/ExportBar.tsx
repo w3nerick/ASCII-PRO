@@ -12,13 +12,10 @@ import {
 interface Props {
   frame: AsciiFrame | null;
   options: AsciiOptions;
+  compact?: boolean;
 }
 
-/**
- * Apple-style export toolbar. Primary action (Save image) uses accent blue,
- * secondary actions are ghost-styled. Copy gives a tactile check confirmation.
- */
-export function ExportBar({ frame, options }: Props) {
+export function ExportBar({ frame, options, compact }: Props) {
   const [copied, setCopied] = useState(false);
   const disabled = !frame;
 
@@ -49,6 +46,55 @@ export function ExportBar({ frame, options }: Props) {
     );
     w.document.close();
   };
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          style={{ minWidth: 44, minHeight: 44 }}
+          disabled={disabled}
+          onClick={handleCopy}
+          title="Copy"
+        >
+          {copied
+            ? <Check className="w-4 h-4 text-sys-green" strokeWidth={2.5} />
+            : <Copy className="w-4 h-4" strokeWidth={2} />}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          style={{ minWidth: 44, minHeight: 44 }}
+          disabled={disabled}
+          onClick={() => frame && downloadPng(frame, exportOpts)}
+          title="Save PNG"
+        >
+          <FileImage className="w-4 h-4" strokeWidth={2} />
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          style={{ minWidth: 44, minHeight: 44 }}
+          disabled={disabled}
+          onClick={() => frame && downloadText(frame)}
+          title="Save TXT"
+        >
+          <FileText className="w-4 h-4" strokeWidth={2} />
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          style={{ minWidth: 44, minHeight: 44 }}
+          disabled={disabled}
+          onClick={handlePreview}
+          title="Preview"
+        >
+          <Share2 className="w-4 h-4" strokeWidth={2} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="material-thin px-3 py-2 flex items-center gap-2 flex-wrap justify-between">

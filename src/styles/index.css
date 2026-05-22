@@ -448,3 +448,36 @@ kbd {
   border-color: var(--accent);
   background: rgba(10, 132, 255, 0.1);
 }
+
+/* ==========================================================================
+ * Mobile-specific
+ * ========================================================================== */
+
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+@media (max-width: 767px) {
+  .ascii-stage {
+    border-radius: 12px;
+    min-height: 0 !important;
+  }
+
+  .dropzone {
+    padding: 2rem 1rem !important;
+    border-radius: 12px;
+  }
+
+  .btn { min-height: 44px; min-width: 44px; }
+  .btn-sm { min-height: 36px; }
+
+  .material-thin { border-radius: 10px; }
+
+  .list-row {
+    padding: 12px 16px;
+    min-height: 48px;
+  }
+}

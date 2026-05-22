@@ -45,7 +45,7 @@ export function Dropzone({ onFile, onDemoImage, onWebcam, disabled }: Props) {
         onDrop={onDrop}
         onClick={() => !disabled && inputRef.current?.click()}
         data-active={drag}
-        className={`dropzone p-12 sm:p-16 text-center ${
+        className={`dropzone p-6 sm:p-12 md:p-16 text-center ${
           disabled ? 'opacity-50 pointer-events-none' : ''
         }`}
       >
