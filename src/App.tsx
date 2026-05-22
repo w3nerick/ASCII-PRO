@@ -58,18 +58,18 @@ export default function App() {
       </div>
 
       {/* Mobile layout */}
-      <div className="flex md:hidden flex-col flex-1 min-h-0">
-        <div className="flex flex-col flex-1 min-h-0 px-3 pt-3 pb-2">
+      <div className="flex md:hidden flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-col flex-1 min-h-0 px-2 pt-2">
           <MediaStage ref={stageRef} options={options} onFrame={setFrame} />
         </div>
 
         {/* iOS-style bottom bar */}
-        <div className="mobile-bar">
+        <div className="mobile-bar shrink-0">
           <ExportBar frame={frame} options={options} compact />
           <button
             type="button"
             onClick={() => setMobileControls(true)}
-            className="fab"
+            className="fab shrink-0"
           >
             <SlidersHorizontal className="w-[18px] h-[18px]" strokeWidth={2} />
             <span>Adjust</span>

@@ -66,9 +66,9 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
     : (options.bgMode === 'original' || options.bgMode === 'blurred') ? '#000' : options.bgColor;
 
   return (
-    <div className="h-full w-full overflow-auto rounded-2xl flex items-center justify-center"
+    <div className="h-full w-full overflow-hidden flex items-center justify-center"
       style={{ background: bgStyle }}>
-      <canvas ref={canvasRef} className="block max-w-full max-h-full" style={{ objectFit: 'contain' }} />
+      <canvas ref={canvasRef} style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
     </div>
   );
 }

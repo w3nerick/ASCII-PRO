@@ -515,9 +515,11 @@ kbd {
   }
 
   .dropzone {
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
+    padding: 1.5rem 1rem;
   }
 
+  /* General buttons — 44px touch target */
   .btn {
     height: 44px;
     padding: 0 18px;
@@ -532,11 +534,25 @@ kbd {
   .btn-icon { width: 44px; padding: 0; }
   .btn-icon.btn-sm { width: 38px; }
 
+  /* Stage toolbar buttons stay compact */
+  .ascii-stage .btn {
+    height: 32px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+  .ascii-stage .btn-sm {
+    height: 28px;
+    padding: 0 6px;
+    font-size: 11px;
+  }
+  .ascii-stage .btn-icon { width: 32px; }
+  .ascii-stage .btn-icon.btn-sm { width: 28px; }
+
   .material-thin { border-radius: var(--radius-md); }
 
   .list-row {
     padding: 14px 20px;
-    min-height: 52px;
+    min-height: 48px;
   }
   .list-row + .list-row {
     margin-left: 20px;

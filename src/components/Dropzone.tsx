@@ -30,7 +30,7 @@ export function Dropzone({ onFile, onDemoImage, onWebcam, disabled }: Props) {
   };
 
   return (
-    <div className="flex flex-col gap-5 md:gap-6 fade-in-up h-full justify-center">
+    <div className="flex flex-col gap-4 md:gap-6 fade-in-up py-4 md:py-0 md:h-full md:justify-center">
       {/* Hero / Dropzone */}
       <div
         onDragOver={(e) => {
