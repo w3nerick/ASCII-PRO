@@ -49,56 +49,39 @@ export function ExportBar({ frame, options, compact }: Props) {
 
   if (compact) {
     return (
-      <div className="flex items-center gap-1.5 flex-1 min-w-0">
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          style={{ minWidth: 44, minHeight: 44 }}
-          disabled={disabled}
+      <div className="flex items-center gap-1 flex-1 min-w-0">
+        <MobileAction
+          icon={copied ? <Check className="w-[18px] h-[18px] text-sys-green" strokeWidth={2} /> : <Copy className="w-[18px] h-[18px]" strokeWidth={1.75} />}
+          label={copied ? 'Copied' : 'Copy'}
           onClick={handleCopy}
-          title="Copy"
-        >
-          {copied
-            ? <Check className="w-4 h-4 text-sys-green" strokeWidth={2.5} />
-            : <Copy className="w-4 h-4" strokeWidth={2} />}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          style={{ minWidth: 44, minHeight: 44 }}
           disabled={disabled}
+          active={copied}
+        />
+        <MobileAction
+          icon={<FileImage className="w-[18px] h-[18px]" strokeWidth={1.75} />}
+          label="Save"
           onClick={() => frame && downloadPng(frame, exportOpts)}
-          title="Save PNG"
-        >
-          <FileImage className="w-4 h-4" strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          style={{ minWidth: 44, minHeight: 44 }}
           disabled={disabled}
+        />
+        <MobileAction
+          icon={<FileText className="w-[18px] h-[18px]" strokeWidth={1.75} />}
+          label="Text"
           onClick={() => frame && downloadText(frame)}
-          title="Save TXT"
-        >
-          <FileText className="w-4 h-4" strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          style={{ minWidth: 44, minHeight: 44 }}
           disabled={disabled}
+        />
+        <MobileAction
+          icon={<Share2 className="w-[18px] h-[18px]" strokeWidth={1.75} />}
+          label="Share"
           onClick={handlePreview}
-          title="Preview"
-        >
-          <Share2 className="w-4 h-4" strokeWidth={2} />
-        </button>
+          disabled={disabled}
+        />
       </div>
     );
   }
 
   return (
     <div className="material-thin px-3 py-2 flex items-center gap-2 flex-wrap justify-between">
-      <span className="callout text-label-tertiary px-1 hidden sm:inline">Export</span>
+      <span className="footnote text-label-tertiary px-1 hidden sm:inline">Export</span>
 
       <div className="flex items-center gap-1.5 flex-wrap">
         <button
@@ -111,12 +94,12 @@ export function ExportBar({ frame, options, compact }: Props) {
           {copied ? (
             <>
               <Check className="w-3.5 h-3.5 text-sys-green" strokeWidth={2.5} />
-              Copied
+              <span>Copied</span>
             </>
           ) : (
             <>
-              <Copy className="w-3.5 h-3.5" strokeWidth={2} />
-              Copy
+              <Copy className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <span>Copy</span>
             </>
           )}
         </button>
@@ -128,8 +111,8 @@ export function ExportBar({ frame, options, compact }: Props) {
           onClick={() => frame && downloadText(frame)}
           title="Download .txt"
         >
-          <FileText className="w-3.5 h-3.5" strokeWidth={2} />
-          Text
+          <FileText className="w-3.5 h-3.5" strokeWidth={1.75} />
+          <span>Text</span>
         </button>
 
         <button
@@ -145,8 +128,8 @@ export function ExportBar({ frame, options, compact }: Props) {
           }
           title="Download .html"
         >
-          <FileCode2 className="w-3.5 h-3.5" strokeWidth={2} />
-          HTML
+          <FileCode2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+          <span>HTML</span>
         </button>
 
         <button
@@ -156,11 +139,11 @@ export function ExportBar({ frame, options, compact }: Props) {
           onClick={handlePreview}
           title="Open standalone preview"
         >
-          <Share2 className="w-3.5 h-3.5" strokeWidth={2} />
+          <Share2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           <span className="hidden sm:inline">Preview</span>
         </button>
 
-        <div className="w-px h-5 bg-separator mx-1" />
+        <div className="w-px h-4 bg-separator mx-1" />
 
         <button
           type="button"
@@ -169,10 +152,30 @@ export function ExportBar({ frame, options, compact }: Props) {
           onClick={() => frame && downloadPng(frame, exportOpts)}
           title="Save as PNG image"
         >
-          <FileImage className="w-3.5 h-3.5" strokeWidth={2} />
-          Save Image
+          <FileImage className="w-3.5 h-3.5" strokeWidth={1.75} />
+          <span>Save Image</span>
         </button>
       </div>
     </div>
+  );
+}
+
+function MobileAction({ icon, label, onClick, disabled, active }: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`mobile-action ${active ? 'active' : ''}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
   );
 }

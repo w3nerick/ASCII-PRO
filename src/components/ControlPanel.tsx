@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { ChevronDown, RotateCcw } from 'lucide-react';
+import { ChevronRight, RotateCcw } from 'lucide-react';
 import { CHARSET_KEYS, charsetLabel, type CharsetKey } from '../lib/charsets';
 import type { AsciiOptions } from '../lib/asciiConverter';
 
@@ -15,29 +15,36 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-separator sticky top-0 bg-bg-elevated z-10">
+      {/* Header — desktop only */}
+      <div className="hidden md:flex items-center justify-between px-4 py-3 border-b sticky top-0 z-10"
+        style={{ borderColor: 'var(--separator)', background: 'var(--bg-elevated)' }}>
         <span className="caption">Controls</span>
         <button type="button" onClick={onReset} className="btn btn-ghost btn-sm btn-icon" title="Reset to defaults">
           <RotateCcw className="w-3.5 h-3.5" strokeWidth={2} />
         </button>
       </div>
 
-      {/* ── MODE ── */}
-      <Group label="Mode">
+      {/* Mobile reset */}
+      <div className="flex md:hidden items-center justify-end px-5 py-2">
+        <button type="button" onClick={onReset} className="btn btn-tinted btn-sm">
+          <RotateCcw className="w-3.5 h-3.5" strokeWidth={2} />
+          <span>Reset</span>
+        </button>
+      </div>
+
+      {/* MODE */}
+      <Group label="Background">
         <Row label="Mode">
-          <select
+          <Select
             value={options.bgMode}
-            onChange={e => set('bgMode', e.target.value as AsciiOptions['bgMode'])}
-            className="input text-sm h-8 px-2 rounded-lg bg-surface-2 border-separator text-label cursor-pointer"
-            style={{ background: 'var(--surface-2)', border: '1px solid var(--separator)', color: 'var(--label)', borderRadius: 8, fontSize: 12, padding: '0 8px', height: 28, cursor: 'pointer' }}
-          >
-            <option value="original">Original Image</option>
-            <option value="blurred">Blurred Image</option>
-            <option value="solid">Solid Color</option>
-            <option value="transparent">Transparent</option>
-          </select>
+            onChange={v => set('bgMode', v as AsciiOptions['bgMode'])}
+            options={[
+              { value: 'original', label: 'Original' },
+              { value: 'blurred', label: 'Blurred' },
+              { value: 'solid', label: 'Solid' },
+              { value: 'transparent', label: 'None' },
+            ]}
+          />
         </Row>
         <Row label="Opacity">
           <SliderRow value={options.bgOpacity} min={0} max={100} step={1}
@@ -61,33 +68,31 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
         )}
       </Group>
 
-      {/* ── CHARACTERS ── */}
+      {/* CHARACTERS */}
       <Group label="Characters">
         <Row label="Font Size">
           <SliderRow value={options.fontSize} min={4} max={28} step={1}
             onChange={v => set('fontSize', v)} unit="px" />
         </Row>
-        <Row label="Character Set">
-          <select
+        <Row label="Charset">
+          <Select
             value={options.charset}
-            onChange={e => set('charset', e.target.value as CharsetKey)}
-            style={{ background: 'var(--surface-2)', border: '1px solid var(--separator)', color: 'var(--label)', borderRadius: 8, fontSize: 12, padding: '0 8px', height: 28, cursor: 'pointer', maxWidth: 130 }}
-          >
-            {CHARSET_KEYS.map(k => <option key={k} value={k}>{charsetLabel(k)}</option>)}
-          </select>
+            onChange={v => set('charset', v as CharsetKey)}
+            options={CHARSET_KEYS.map(k => ({ value: k, label: charsetLabel(k) }))}
+          />
         </Row>
         {options.charset === 'custom' && (
-          <Row label="Chars">
+          <Row label="Custom">
             <input type="text" className="input" value={options.customRamp}
               onChange={e => set('customRamp', e.target.value)}
-              style={{ fontFamily: 'monospace', fontSize: 12 }} />
+              style={{ fontFamily: 'var(--font-mono)', fontSize: 13, maxWidth: 120 }} />
           </Row>
         )}
-        <Row label="Char Opacity">
+        <Row label="Opacity">
           <SliderRow value={options.charOpacity} min={10} max={100} step={1}
             onChange={v => set('charOpacity', v)} unit="%" />
         </Row>
-        <Row label="Invert Mapping">
+        <Row label="Invert">
           <Switch value={options.invert} onChange={v => set('invert', v)} />
         </Row>
         <Row label="Randomize">
@@ -101,24 +106,24 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
         )}
       </Group>
 
-      {/* ── INTENSITY ── */}
-      <Group label="Intensity">
+      {/* INTENSITY */}
+      <Group label="Adjustments">
         <Row label="Coverage">
           <SliderRow value={options.coverage} min={0} max={100} step={1}
             onChange={v => set('coverage', v)} unit="%" />
         </Row>
-        <Row label="Edge Emphasis">
+        <Row label="Edges">
           <Switch value={options.edges} onChange={v => set('edges', v)} />
         </Row>
         {options.edges && (
-          <Row label="Edge Threshold">
+          <Row label="Threshold">
             <SliderRow value={options.edgeThreshold} min={0} max={255} step={1}
               onChange={v => set('edgeThreshold', v)} />
           </Row>
         )}
         <Row label="Density">
           <SliderRow value={options.density} min={0.5} max={2} step={0.05}
-            onChange={v => set('density', v)} unit="×" format={v => v.toFixed(2)} />
+            onChange={v => set('density', v)} unit="x" format={v => v.toFixed(2)} />
         </Row>
         <Row label="Brightness">
           <SliderRow value={options.brightness} min={-100} max={100} step={1}
@@ -132,13 +137,13 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
           <SliderRow value={options.saturation} min={-100} max={100} step={1}
             onChange={v => set('saturation', v)} />
         </Row>
-        <Row label="Color Enhance">
+        <Row label="Color Boost">
           <SliderRow value={options.colorEnhance} min={0} max={100} step={1}
             onChange={v => set('colorEnhance', v)} unit="%" />
         </Row>
       </Group>
 
-      {/* ── OUTPUT ── */}
+      {/* OUTPUT */}
       <Group label="Output">
         <Row label="Color">
           <Switch value={options.color} onChange={v => set('color', v)} />
@@ -158,8 +163,8 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
         </Row>
       </Group>
 
-      {/* ── POST-PROCESSING ── */}
-      <Group label="Post-Processing" defaultOpen={false}>
+      {/* POST-PROCESSING */}
+      <Group label="Effects" defaultOpen={false}>
         <FxRow label="Bloom" value={options.fx_bloom} onChange={v => set('fx_bloom', v)}>
           <Row label="Intensity">
             <SliderRow value={options.fx_bloom_intensity} min={0} max={100} step={1}
@@ -198,33 +203,34 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
         </FxRow>
       </Group>
 
-      {/* bottom padding */}
-      <div className="h-6 shrink-0" />
+      <div className="h-8 shrink-0" />
     </div>
   );
 }
 
-/* ── Design system sub-components ─────────────────────── */
+/* ── Sub-components ─────────────────────── */
 
 function Group({ label, children, defaultOpen = true }: { label: string; children: ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-b border-separator">
+    <div className="px-3 md:px-3 py-2">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-surface-1 transition-colors"
+        className="w-full flex items-center justify-between px-1 py-1.5"
       >
         <span className="caption">{label}</span>
-        <ChevronDown
-          className="w-3.5 h-3.5 text-label-tertiary transition-transform"
-          style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}
+        <ChevronRight
+          className="w-3 h-3 text-label-quaternary transition-transform duration-200"
+          style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}
           strokeWidth={2.5}
         />
       </button>
       {open && (
-        <div className="rounded-xl mx-3 mb-3 overflow-hidden border border-separator"
-          style={{ background: 'var(--surface-1)' }}>
+        <div
+          className="mt-1.5 rounded-xl overflow-hidden"
+          style={{ background: 'var(--surface-1)', border: '0.5px solid var(--separator)' }}
+        >
           {children}
         </div>
       )}
@@ -235,7 +241,7 @@ function Group({ label, children, defaultOpen = true }: { label: string; childre
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="list-row">
-      <span className="callout text-label-secondary shrink-0" style={{ minWidth: 104 }}>{label}</span>
+      <span className="subhead text-label-secondary shrink-0">{label}</span>
       <div className="flex items-center justify-end flex-1 min-w-0">{children}</div>
     </div>
   );
@@ -247,11 +253,11 @@ function SliderRow({ value, min, max, step, onChange, unit = '', format }: {
 }) {
   const display = format ? format(value) : String(value);
   return (
-    <div className="flex items-center gap-2 w-full">
+    <div className="flex items-center gap-3 w-full">
       <input type="range" className="slider flex-1"
         value={value} min={min} max={max} step={step}
         onChange={e => onChange(Number(e.target.value))} />
-      <span className="footnote text-label-tertiary tabular-nums text-right"
+      <span className="footnote text-label-tertiary tabular-nums text-right font-mono"
         style={{ minWidth: 36 }}>{display}{unit}</span>
     </div>
   );
@@ -270,16 +276,50 @@ function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   );
 }
 
+function Select({ value, onChange, options }: {
+  value: string; onChange: (v: string) => void; options: { value: string; label: string }[];
+}) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        background: 'var(--surface-2)',
+        border: '0.5px solid var(--separator-strong)',
+        color: 'var(--label)',
+        borderRadius: 8,
+        fontSize: 13,
+        padding: '0 10px',
+        height: 30,
+        cursor: 'pointer',
+        maxWidth: 130,
+        appearance: 'none',
+        WebkitAppearance: 'none',
+        paddingRight: 24,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(235,235,245,0.3)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'right 8px center',
+      }}
+    >
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
+
 function FxRow({ label, value, onChange, children }: {
   label: string; value: boolean; onChange: (v: boolean) => void; children: ReactNode;
 }) {
   return (
     <div>
       <div className="list-row">
-        <span className="callout text-label-secondary">{label}</span>
+        <span className="subhead text-label-secondary">{label}</span>
         <Switch value={value} onChange={onChange} />
       </div>
-      {value && <div className="border-t border-separator bg-surface-2/30">{children}</div>}
+      {value && (
+        <div style={{ borderTop: '0.5px solid var(--separator)', background: 'rgba(0,0,0,0.15)' }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }

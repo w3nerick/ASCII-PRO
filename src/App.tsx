@@ -39,15 +39,15 @@ export default function App() {
     <div className="flex flex-col" style={{ height: '100dvh', background: 'var(--bg)', overflow: 'hidden' }}>
       <Header onHelp={() => setHelp(true)} />
 
-      {/* ── Desktop layout ── */}
+      {/* Desktop layout */}
       <div className="hidden md:flex flex-1 min-h-0">
-        <div className="flex flex-col flex-1 min-w-0 p-3 gap-2">
+        <div className="flex flex-col flex-1 min-w-0 p-4 gap-3">
           <MediaStage ref={stageRef} options={options} onFrame={setFrame} />
           <ExportBar frame={frame} options={options} />
         </div>
         <div
-          className="shrink-0 border-l border-separator flex flex-col overflow-hidden"
-          style={{ width: 272, background: 'var(--bg-elevated)' }}
+          className="shrink-0 border-l flex flex-col overflow-hidden"
+          style={{ width: 280, background: 'var(--bg-elevated)', borderColor: 'var(--separator)' }}
         >
           <ControlPanel
             options={options}
@@ -57,29 +57,27 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Mobile layout ── */}
+      {/* Mobile layout */}
       <div className="flex md:hidden flex-col flex-1 min-h-0">
-        <div className="flex flex-col flex-1 min-h-0 px-2 pt-2 pb-1 gap-2">
+        <div className="flex flex-col flex-1 min-h-0 px-3 pt-3 pb-2">
           <MediaStage ref={stageRef} options={options} onFrame={setFrame} />
         </div>
-        <div
-          className="flex items-center gap-2 px-3 py-2 border-t border-separator"
-          style={{ background: 'var(--bg-elevated)', paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}
-        >
+
+        {/* iOS-style bottom bar */}
+        <div className="mobile-bar">
           <ExportBar frame={frame} options={options} compact />
           <button
             type="button"
             onClick={() => setMobileControls(true)}
-            className="btn btn-primary"
-            style={{ minWidth: 44, minHeight: 44, borderRadius: 12 }}
+            className="fab"
           >
-            <SlidersHorizontal className="w-4 h-4" strokeWidth={2} />
-            <span className="text-sm font-medium">Adjust</span>
+            <SlidersHorizontal className="w-[18px] h-[18px]" strokeWidth={2} />
+            <span>Adjust</span>
           </button>
         </div>
       </div>
 
-      {/* ── Mobile controls bottom sheet ── */}
+      {/* Mobile controls bottom sheet */}
       <MobileSheet open={mobileControls} onClose={() => setMobileControls(false)} title="Controls">
         <ControlPanel
           options={options}
