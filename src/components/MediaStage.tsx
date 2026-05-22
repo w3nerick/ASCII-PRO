@@ -31,6 +31,7 @@ import { fileKind, loadImageFromFile, loadVideoFromFile } from '../lib/loadMedia
 import { AsciiVideoRecorder } from '../lib/videoRecorder';
 import { downloadVideoBlob } from '../lib/exporters';
 import { generateDemoImage } from '../lib/demoImage';
+import { buildZip } from '../lib/zip';
 
 type Mode = 'idle' | 'image' | 'video' | 'webcam';
 
@@ -218,6 +219,44 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
     }
   };
 
+  const handleBatch = async (files: File[]) => {
+    setError(null);
+    const imageFiles = files.filter(f => fileKind(f) === 'image');
+    if (imageFiles.length === 0) { setError('No images found in batch'); return; }
+    try {
+      const opts = optionsRef.current;
+      const blobs: { name: string; blob: Blob }[] = [];
+      for (const file of imageFiles) {
+        const img = await loadImageFromFile(file);
+        const f = imageToAscii(img, opts);
+        const { frameToPngBlob } = await import('../lib/exporters');
+        const blob = await frameToPngBlob(f, {
+          background: opts.bgColor,
+          foreground: opts.fgColor,
+          fontSize: opts.fontSize,
+          color: opts.color,
+          scale: opts.exportScale,
+        });
+        const baseName = file.name.replace(/\.[^.]+$/, '');
+        blobs.push({ name: `${baseName}-ascii.png`, blob });
+      }
+      if (blobs.length === 1) {
+        const { downloadVideoBlob } = await import('../lib/exporters');
+        downloadVideoBlob(blobs[0].blob, blobs[0].name);
+      } else {
+        const zip = await buildZip(blobs);
+        const url = URL.createObjectURL(zip);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'ascii-pro-batch.zip';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message ?? 'Batch export failed');
+    }
+  };
+
 
 
   const loadDemo = async (img?: HTMLImageElement) => {
@@ -306,6 +345,7 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
       {mode === 'idle' ? (
         <Dropzone
           onFile={handleFile}
+          onBatch={handleBatch}
           onDemoImage={(img) => loadDemo(img)}
           onWebcam={startWebcam}
         />

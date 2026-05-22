@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { AsciiFrame, AsciiOptions } from '../lib/asciiConverter';
+import type { AsciiFrame, AsciiOptions, ColorPalette } from '../lib/asciiConverter';
 import { CHARSETS } from '../lib/charsets';
 
 interface Props {
@@ -19,7 +19,6 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
   animFrameRef.current = frame;
   animOptionsRef.current = options;
 
-  // Animation loop for randomizing chars
   useEffect(() => {
     if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
     if (!options.animatedAscii || !frame?.cells) return;
@@ -40,7 +39,6 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
       const f = animFrameRef.current;
       const o = animOptionsRef.current;
       if (!f?.cells || !canvas) return;
-      // Randomize a subset of chars and re-render
       const mutated = f.cells.map(row =>
         row.map(c => c.char === ' ' ? c : {
           ...c,
@@ -53,7 +51,6 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
   }, [options.animatedAscii, options.animSpeed, frame, options.charset, options.customRamp]);
 
-  // Static render when not animating
   useEffect(() => {
     if (options.animatedAscii) return;
     if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
@@ -73,6 +70,64 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
   );
 }
 
+// ── COLOR PALETTES ──────────────────────────────────────
+function applyPalette(r: number, g: number, b: number, palette: ColorPalette): [number, number, number] {
+  if (palette === 'original') return [r, g, b];
+  switch (palette) {
+    case 'warm': {
+      const warm_r = Math.min(255, r * 1.2 + 20);
+      const warm_g = Math.min(255, g * 1.0 + 5);
+      const warm_b = Math.max(0, b * 0.7 - 10);
+      return [warm_r, warm_g, warm_b];
+    }
+    case 'cool': {
+      const cool_r = Math.max(0, r * 0.7 - 10);
+      const cool_g = Math.min(255, g * 0.95 + 10);
+      const cool_b = Math.min(255, b * 1.3 + 30);
+      return [cool_r, cool_g, cool_b];
+    }
+    case 'cyberpunk': {
+      const lum = (r * 0.3 + g * 0.59 + b * 0.11) / 255;
+      const cp_r = Math.min(255, r * 0.6 + lum * 180);
+      const cp_g = Math.min(255, g * 0.3 + lum * 40);
+      const cp_b = Math.min(255, b * 0.8 + lum * 200);
+      return [cp_r, cp_g, cp_b];
+    }
+    case 'neon': {
+      const sat = 1.8;
+      const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const n_r = Math.min(255, Math.max(0, gray + (r - gray) * sat));
+      const n_g = Math.min(255, Math.max(0, gray + (g - gray) * sat));
+      const n_b = Math.min(255, Math.max(0, gray + (b - gray) * sat));
+      return [n_r, n_g, n_b];
+    }
+    case 'sunset': {
+      const lum2 = (r + g + b) / 765;
+      const s_r = Math.min(255, 255 * lum2 * 1.4 + 60);
+      const s_g = Math.min(255, 140 * lum2 + 20);
+      const s_b = Math.min(255, 80 * lum2 * (1 - lum2) * 4 + 40);
+      return [s_r, s_g, s_b];
+    }
+    default: return [r, g, b];
+  }
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const v = parseInt(hex.replace('#', ''), 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+}
+
+function applyGradientMap(r: number, g: number, b: number, start: string, end: string): [number, number, number] {
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  const [sr, sg, sb] = hexToRgb(start);
+  const [er, eg, eb] = hexToRgb(end);
+  return [
+    sr + (er - sr) * lum,
+    sg + (eg - sg) * lum,
+    sb + (eb - sb) * lum,
+  ];
+}
+
 // ── CORE RENDERER ────────────────────────────────────────
 function renderToCanvas(
   canvas: HTMLCanvasElement,
@@ -84,7 +139,6 @@ function renderToCanvas(
   if (!ctx) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-  // ── IDLE STATE ─────────────────────────────────────────
   if (!frame) {
     const w = Math.max(1, canvas.clientWidth || 320);
     const h = Math.max(1, canvas.clientHeight || 240);
@@ -102,7 +156,6 @@ function renderToCanvas(
 
   const isOverlay = (options.bgMode === 'original' || options.bgMode === 'blurred') && src;
 
-  // ── CANVAS SIZE ────────────────────────────────────────
   let cssW: number, cssH: number;
   if (isOverlay) {
     const sw = src instanceof HTMLImageElement ? (src.naturalWidth || src.width) : (src as HTMLVideoElement).videoWidth;
@@ -125,7 +178,6 @@ function renderToCanvas(
   if (options.bgMode === 'transparent') {
     ctx.clearRect(0, 0, cssW, cssH);
   } else if (options.bgMode === 'original' && src) {
-    // Draw image at bgOpacity — the key to the ascii-magic look
     ctx.globalAlpha = options.bgOpacity / 100;
     ctx.drawImage(src, 0, 0, cssW, cssH);
     ctx.globalAlpha = 1;
@@ -145,50 +197,136 @@ function renderToCanvas(
   // ── ASCII CHARS ───────────────────────────────────────
   ctx.globalAlpha = options.charOpacity / 100;
 
+  const glowRadius = options.charGlow / 100 * 12;
+  const brightMul = options.charBrightness / 100;
+  const palette = options.colorPalette;
+  const useGradient = options.gradientMap;
+
+  function processColor(r: number, g: number, b: number): string {
+    let pr: number, pg: number, pb: number;
+    if (useGradient) {
+      [pr, pg, pb] = applyGradientMap(r, g, b, options.gradientStart, options.gradientEnd);
+    } else {
+      [pr, pg, pb] = applyPalette(r, g, b, palette);
+    }
+    if (brightMul !== 1) {
+      pr = Math.min(255, Math.round(pr * brightMul));
+      pg = Math.min(255, Math.round(pg * brightMul));
+      pb = Math.min(255, Math.round(pb * brightMul));
+    }
+    return `rgb(${pr | 0},${pg | 0},${pb | 0})`;
+  }
+
+  const renderMode = options.renderMode;
+
   if (isOverlay) {
     const cellW = cssW / frame.cols;
     const cellH = cssH / frame.rows;
-    const fs = Math.max(2, Math.min(cellW / 0.55, cellH * 0.95));
-    ctx.font = `${fs}px "Courier New", Courier, monospace`;
-    ctx.textBaseline = 'top';
-    ctx.textAlign = 'left';
 
     if (frame.cells) {
+      if (glowRadius > 0) ctx.shadowBlur = glowRadius;
       let cur = '';
-      for (let y = 0; y < frame.cells.length; y++) {
-        const row = frame.cells[y];
-        for (let x = 0; x < row.length; x++) {
-          const c = row[x];
-          if (c.char === ' ') continue;
-          const col = `rgb(${c.r},${c.g},${c.b})`;
-          if (col !== cur) { ctx.fillStyle = col; cur = col; }
-          ctx.fillText(c.char, x * cellW, y * cellH);
+
+      if (renderMode === 'filled_circle') {
+        const radius = Math.min(cellW, cellH) * 0.4;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            ctx.beginPath();
+            ctx.arc(x * cellW + cellW / 2, y * cellH + cellH / 2, radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'filled_square') {
+        const sz = Math.min(cellW, cellH) * 0.8;
+        const off = (Math.min(cellW, cellH) - sz) / 2;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            ctx.fillRect(x * cellW + off, y * cellH + off, sz, sz);
+          }
+        }
+      } else {
+        const fs = Math.max(2, Math.min(cellW / 0.55, cellH * 0.95));
+        ctx.font = `${fs}px "Courier New", Courier, monospace`;
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            ctx.fillText(c.char, x * cellW, y * cellH);
+          }
         }
       }
+      ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
     }
   } else {
-    // Classic: dark background + bright colored chars
     const charW = options.fontSize * 0.6;
     const lineH = options.fontSize;
     const pad = 12;
-    ctx.font = `${options.fontSize}px "Share Tech Mono", "SF Mono", ui-monospace, monospace`;
-    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
 
     if (frame.cells) {
+      if (glowRadius > 0) ctx.shadowBlur = glowRadius;
       let cur = '';
-      for (let y = 0; y < frame.cells.length; y++) {
-        const row = frame.cells[y];
-        const py = pad + y * lineH;
-        for (let x = 0; x < row.length; x++) {
-          const c = row[x];
-          if (c.char === ' ') continue;
-          const col = `rgb(${c.r},${c.g},${c.b})`;
-          if (col !== cur) { ctx.fillStyle = col; cur = col; }
-          ctx.fillText(c.char, pad + x * charW, py);
+
+      if (renderMode === 'filled_circle') {
+        const radius = Math.min(charW, lineH) * 0.38;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            ctx.beginPath();
+            ctx.arc(pad + x * charW + charW / 2, pad + y * lineH + lineH / 2, radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'filled_square') {
+        const sz = Math.min(charW, lineH) * 0.75;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            ctx.fillRect(pad + x * charW, pad + y * lineH + (lineH - sz) / 2, sz, sz);
+          }
+        }
+      } else {
+        ctx.font = `${options.fontSize}px "Share Tech Mono", "SF Mono", ui-monospace, monospace`;
+        ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          const py = pad + y * lineH;
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            ctx.fillText(c.char, pad + x * charW, py);
+          }
         }
       }
+      ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
     } else {
       ctx.fillStyle = options.fgColor;
+      ctx.font = `${options.fontSize}px "Share Tech Mono", "SF Mono", ui-monospace, monospace`;
+      ctx.textBaseline = 'top'; ctx.textAlign = 'left';
       frame.text.split('\n').forEach((line, y) =>
         ctx.fillText(line, 12, 12 + y * options.fontSize));
     }
@@ -203,9 +341,18 @@ function renderToCanvas(
 function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: AsciiOptions) {
   if (o.fx_bloom) {
     const i = o.fx_bloom_intensity / 100;
-    ctx.save(); ctx.filter = `blur(${Math.round(3 + i * 8)}px)`;
-    ctx.globalAlpha = i * 0.5; ctx.globalCompositeOperation = 'screen';
-    ctx.drawImage(ctx.canvas, 0, 0); ctx.restore();
+    ctx.save(); ctx.globalCompositeOperation = 'screen';
+    const passes = [
+      { blur: Math.round(2 + i * 4), alpha: i * 0.4 },
+      { blur: Math.round(5 + i * 10), alpha: i * 0.3 },
+      { blur: Math.round(12 + i * 18), alpha: i * 0.2 },
+    ];
+    for (const p of passes) {
+      ctx.filter = `blur(${p.blur}px)`;
+      ctx.globalAlpha = p.alpha;
+      ctx.drawImage(ctx.canvas, 0, 0);
+    }
+    ctx.restore();
   }
   if (o.fx_chromatic) {
     const px = o.fx_chromatic_px;

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { ChevronRight, RotateCcw } from 'lucide-react';
 import { CHARSET_KEYS, charsetLabel, type CharsetKey } from '../lib/charsets';
-import type { AsciiOptions } from '../lib/asciiConverter';
+import type { AsciiOptions, RenderMode, ColorPalette, AspectRatio } from '../lib/asciiConverter';
 
 interface Props {
   options: AsciiOptions;
@@ -70,6 +70,17 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
 
       {/* CHARACTERS */}
       <Group label="Characters">
+        <Row label="Render">
+          <Select
+            value={options.renderMode}
+            onChange={v => set('renderMode', v as RenderMode)}
+            options={[
+              { value: 'text', label: 'Text' },
+              { value: 'filled_circle', label: 'Dots' },
+              { value: 'filled_square', label: 'Squares' },
+            ]}
+          />
+        </Row>
         <Row label="Font Size">
           <SliderRow value={options.fontSize} min={4} max={28} step={1}
             onChange={v => set('fontSize', v)} unit="px" />
@@ -92,6 +103,14 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
           <SliderRow value={options.charOpacity} min={10} max={100} step={1}
             onChange={v => set('charOpacity', v)} unit="%" />
         </Row>
+        <Row label="Glow">
+          <SliderRow value={options.charGlow} min={0} max={100} step={1}
+            onChange={v => set('charGlow', v)} unit="%" />
+        </Row>
+        <Row label="Brightness">
+          <SliderRow value={options.charBrightness} min={50} max={250} step={5}
+            onChange={v => set('charBrightness', v)} unit="%" />
+        </Row>
         <Row label="Invert">
           <Switch value={options.invert} onChange={v => set('invert', v)} />
         </Row>
@@ -103,6 +122,66 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
             <SliderRow value={options.animSpeed} min={1} max={30} step={1}
               onChange={v => set('animSpeed', v)} unit="fps" />
           </Row>
+        )}
+      </Group>
+
+      {/* COLOR */}
+      <Group label="Color">
+        <Row label="Enabled">
+          <Switch value={options.color} onChange={v => set('color', v)} />
+        </Row>
+        {!options.color && (
+          <Row label="Foreground">
+            <div className="flex items-center gap-2">
+              <span className="footnote text-label-tertiary font-mono">{options.fgColor}</span>
+              <label className="color-swatch" style={{ background: options.fgColor }}>
+                <input type="color" value={options.fgColor} onChange={e => set('fgColor', e.target.value)} />
+              </label>
+            </div>
+          </Row>
+        )}
+        {options.color && (
+          <>
+            <Row label="Palette">
+              <Select
+                value={options.colorPalette}
+                onChange={v => set('colorPalette', v as ColorPalette)}
+                options={[
+                  { value: 'original', label: 'Original' },
+                  { value: 'warm', label: 'Warm' },
+                  { value: 'cool', label: 'Cool' },
+                  { value: 'cyberpunk', label: 'Cyberpunk' },
+                  { value: 'neon', label: 'Neon' },
+                  { value: 'sunset', label: 'Sunset' },
+                ]}
+              />
+            </Row>
+            <Row label="Gradient Map">
+              <Switch value={options.gradientMap} onChange={v => set('gradientMap', v)} />
+            </Row>
+            {options.gradientMap && (
+              <>
+                <Row label="Start">
+                  <div className="flex items-center gap-2">
+                    <label className="color-swatch" style={{ background: options.gradientStart }}>
+                      <input type="color" value={options.gradientStart} onChange={e => set('gradientStart', e.target.value)} />
+                    </label>
+                  </div>
+                </Row>
+                <Row label="End">
+                  <div className="flex items-center gap-2">
+                    <label className="color-swatch" style={{ background: options.gradientEnd }}>
+                      <input type="color" value={options.gradientEnd} onChange={e => set('gradientEnd', e.target.value)} />
+                    </label>
+                  </div>
+                </Row>
+              </>
+            )}
+            <Row label="Color Boost">
+              <SliderRow value={options.colorEnhance} min={0} max={100} step={1}
+                onChange={v => set('colorEnhance', v)} unit="%" />
+            </Row>
+          </>
         )}
       </Group>
 
@@ -137,29 +216,37 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
           <SliderRow value={options.saturation} min={-100} max={100} step={1}
             onChange={v => set('saturation', v)} />
         </Row>
-        <Row label="Color Boost">
-          <SliderRow value={options.colorEnhance} min={0} max={100} step={1}
-            onChange={v => set('colorEnhance', v)} unit="%" />
+        <Row label="Dithering">
+          <Switch value={options.dithering} onChange={v => set('dithering', v)} />
         </Row>
       </Group>
 
-      {/* OUTPUT */}
+      {/* OUTPUT / EXPORT */}
       <Group label="Output">
-        <Row label="Color">
-          <Switch value={options.color} onChange={v => set('color', v)} />
+        <Row label="Aspect Ratio">
+          <Select
+            value={options.aspectRatio}
+            onChange={v => set('aspectRatio', v as AspectRatio)}
+            options={[
+              { value: 'free', label: 'Free' },
+              { value: '1:1', label: '1:1' },
+              { value: '4:5', label: '4:5 IG' },
+              { value: '9:16', label: '9:16 Story' },
+              { value: '16:9', label: '16:9 Wide' },
+              { value: '3:1', label: '3:1 Banner' },
+            ]}
+          />
         </Row>
-        {!options.color && (
-          <Row label="Foreground">
-            <div className="flex items-center gap-2">
-              <span className="footnote text-label-tertiary font-mono">{options.fgColor}</span>
-              <label className="color-swatch" style={{ background: options.fgColor }}>
-                <input type="color" value={options.fgColor} onChange={e => set('fgColor', e.target.value)} />
-              </label>
-            </div>
-          </Row>
-        )}
-        <Row label="Dithering">
-          <Switch value={options.dithering} onChange={v => set('dithering', v)} />
+        <Row label="Export Scale">
+          <Select
+            value={String(options.exportScale)}
+            onChange={v => set('exportScale', Number(v))}
+            options={[
+              { value: '1', label: '1x' },
+              { value: '2', label: '2x HD' },
+              { value: '4', label: '4x Ultra' },
+            ]}
+          />
         </Row>
       </Group>
 

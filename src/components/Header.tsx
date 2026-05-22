@@ -12,11 +12,11 @@ export function Header({ onHelp }: Props) {
           <div
             className="w-7 h-7 md:w-8 md:h-8 rounded-[8px] flex items-center justify-center flex-shrink-0"
             style={{
-              background: 'linear-gradient(135deg, #0a84ff 0%, #5e5ce6 100%)',
-              boxShadow: '0 2px 8px rgba(10,132,255,0.3)',
+              background: 'linear-gradient(135deg, #ffffff 0%, #a0a0a0 100%)',
+              boxShadow: '0 2px 8px rgba(255,255,255,0.15)',
             }}
           >
-            <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" strokeWidth={2.5} />
+            <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 text-black" strokeWidth={2.5} />
           </div>
           <h1 className="headline m-0 truncate">ASCII Pro</h1>
           <span className="footnote text-label-tertiary hidden md:inline">

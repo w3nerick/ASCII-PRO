@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Apple-like dark mode palette
+        // Monochrome Black/White/Gray palette
         bg: '#000000',
         'bg-elevated': '#0a0a0a',
         surface: {
@@ -23,20 +23,19 @@ export default {
           strong: 'rgba(255, 255, 255, 0.14)',
         },
         accent: {
-          DEFAULT: '#0a84ff',
-          hover: '#1f8eff',
-          pressed: '#0570e0',
+          DEFAULT: '#ffffff',
+          hover: '#e0e0e0',
+          pressed: '#b0b0b0',
         },
-        // Apple system colors
         sys: {
-          green: '#30d158',
-          red: '#ff453a',
-          orange: '#ff9f0a',
-          yellow: '#ffd60a',
-          pink: '#ff375f',
-          purple: '#bf5af2',
-          teal: '#64d2ff',
-          indigo: '#5e5ce6',
+          green: '#d4d4d4',
+          red: '#a0a0a0',
+          orange: '#c8c8c8',
+          yellow: '#e8e8e8',
+          pink: '#b0b0b0',
+          purple: '#9a9a9a',
+          teal: '#c0c0c0',
+          indigo: '#8a8a8a',
         },
       },
       fontFamily: {
@@ -73,7 +72,7 @@ export default {
       boxShadow: {
         card: '0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.18)',
         elevated: '0 4px 12px rgba(0, 0, 0, 0.5), 0 16px 48px rgba(0, 0, 0, 0.32)',
-        focus: '0 0 0 3px rgba(10, 132, 255, 0.35)',
+        focus: '0 0 0 3px rgba(255, 255, 255, 0.15)',
       },
       transitionTimingFunction: {
         'apple': 'cubic-bezier(0.4, 0, 0.2, 1)',

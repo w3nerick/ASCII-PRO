@@ -1,5 +1,9 @@
 import { CHARSETS, type CharsetKey } from './charsets';
 
+export type RenderMode = 'text' | 'filled_circle' | 'filled_square';
+export type ColorPalette = 'original' | 'warm' | 'cool' | 'cyberpunk' | 'neon' | 'sunset';
+export type AspectRatio = 'free' | '1:1' | '4:5' | '9:16' | '16:9' | '3:1';
+
 export interface AsciiOptions {
   /* ---- Conversion options (changing any of these requires re-running) ---- */
   width: number;
@@ -20,6 +24,7 @@ export interface AsciiOptions {
   fontSize: number;
   bgColor: string;
   fgColor: string;
+  renderMode: RenderMode;
   // Background mode
   bgMode: 'solid' | 'blurred' | 'original' | 'transparent';
   bgBlur: number;       // 0..60 px — only for 'blurred' mode
@@ -30,6 +35,17 @@ export interface AsciiOptions {
   // Animation
   animatedAscii: boolean;
   animSpeed: number;    // 1..10
+  // Glow & brightness (the "holographic LED" look)
+  charGlow: number;         // 0..100 — per-character glow radius
+  charBrightness: number;   // 0..200 — color brightness boost (100 = no change)
+  // Color palette & gradient mapping
+  colorPalette: ColorPalette;
+  gradientMap: boolean;
+  gradientStart: string;
+  gradientEnd: string;
+  // Aspect ratio & export
+  aspectRatio: AspectRatio;
+  exportScale: number;     // 1, 2, or 4
   // Post-FX (applied on canvas after ASCII render)
   fx_scanlines: boolean;
   fx_scanlines_intensity: number;   // 0..100
@@ -80,11 +96,20 @@ export const DEFAULT_OPTIONS: AsciiOptions = {
   fontSize: 9,
   bgColor: '#000000',
   fgColor: '#ffffff',
+  renderMode: 'text',
   bgMode: 'original',
   bgBlur: 0,
   bgOpacity: 90,
   charOpacity: 100,
   coverage: 85,
+  charGlow: 0,
+  charBrightness: 100,
+  colorPalette: 'original',
+  gradientMap: false,
+  gradientStart: '#0066ff',
+  gradientEnd: '#ffcc00',
+  aspectRatio: 'free',
+  exportScale: 2,
   animatedAscii: false,
   animSpeed: 3,
   fx_scanlines: false,
@@ -123,6 +148,7 @@ export function conversionKey(o: AsciiOptions): string {
     o.dithering ? 1 : 0,
     o.coverage,
     o.density,
+    o.aspectRatio,
   ].join('|');
 }
 
@@ -222,8 +248,16 @@ export function sourceToAscii(
 ): AsciiFrame {
   const ramp = getRamp(options);
   const cols = Math.max(8, Math.min(400, Math.floor(options.width)));
-  const aspect = sourceHeight / sourceWidth;
   const densityFactor = Math.max(0.3, Math.min(2.5, options.density));
+
+  let aspect: number;
+  if (options.aspectRatio !== 'free') {
+    const [aw, ah] = options.aspectRatio.split(':').map(Number);
+    aspect = ah / aw;
+  } else {
+    aspect = sourceHeight / sourceWidth;
+  }
+
   const rows = Math.max(4, Math.floor(cols * aspect * CHAR_ASPECT * densityFactor));
   const total = cols * rows;
 

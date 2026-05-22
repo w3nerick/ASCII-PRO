@@ -4,12 +4,13 @@ import { DEMO_GALLERY } from '../lib/demoImage';
 
 interface Props {
   onFile: (file: File) => void;
+  onBatch?: (files: File[]) => void;
   onDemoImage?: (img: HTMLImageElement) => void;
   onWebcam?: () => void;
   disabled?: boolean;
 }
 
-export function Dropzone({ onFile, onDemoImage, onWebcam, disabled }: Props) {
+export function Dropzone({ onFile, onBatch, onDemoImage, onWebcam, disabled }: Props) {
   const [drag, setDrag] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -17,9 +18,13 @@ export function Dropzone({ onFile, onDemoImage, onWebcam, disabled }: Props) {
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files || files.length === 0) return;
-      onFile(files[0]);
+      if (files.length > 1 && onBatch) {
+        onBatch(Array.from(files));
+      } else {
+        onFile(files[0]);
+      }
     },
-    [onFile],
+    [onFile, onBatch],
   );
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -49,6 +54,7 @@ export function Dropzone({ onFile, onDemoImage, onWebcam, disabled }: Props) {
           ref={inputRef}
           type="file"
           accept="image/*,video/*"
+          multiple
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
         />
@@ -57,16 +63,16 @@ export function Dropzone({ onFile, onDemoImage, onWebcam, disabled }: Props) {
             className="w-14 h-14 md:w-16 md:h-16 rounded-2xl flex items-center justify-center"
             style={{
               background: drag
-                ? 'linear-gradient(135deg, #0a84ff, #5e5ce6)'
+                ? 'linear-gradient(135deg, #ffffff, #c0c0c0)'
                 : 'var(--surface-2)',
               boxShadow: drag
-                ? '0 8px 24px rgba(10,132,255,0.35)'
+                ? '0 8px 24px rgba(255,255,255,0.2)'
                 : '0 1px 3px rgba(0,0,0,0.2)',
               transition: 'all 280ms var(--ease-out)',
             }}
           >
             <Upload
-              className={`w-6 h-6 md:w-7 md:h-7 ${drag ? 'text-white' : 'text-label-secondary'}`}
+              className={`w-6 h-6 md:w-7 md:h-7 ${drag ? 'text-black' : 'text-label-secondary'}`}
               strokeWidth={1.5}
             />
           </div>
@@ -99,11 +105,11 @@ export function Dropzone({ onFile, onDemoImage, onWebcam, disabled }: Props) {
           <button
             type="button"
             onClick={onWebcam}
-            className="btn btn-ghost"
+            className="btn btn-grain-dark"
             aria-label="Use webcam"
           >
-            <Camera className="w-4 h-4" strokeWidth={1.75} />
-            <span>Use webcam</span>
+            <Camera className="w-4 h-4 relative z-[2]" strokeWidth={1.75} />
+            <span className="relative z-[2]">Use webcam</span>
           </button>
         </div>
       )}
@@ -158,13 +164,13 @@ export function Dropzone({ onFile, onDemoImage, onWebcam, disabled }: Props) {
 function gradientFor(id: string): string {
   switch (id) {
     case 'synthwave':
-      return 'linear-gradient(135deg, #5e5ce6 0%, #ff375f 60%, #ff9f0a 100%)';
+      return 'linear-gradient(135deg, #2a2a2a 0%, #606060 60%, #e0e0e0 100%)';
     case 'portrait':
-      return 'linear-gradient(135deg, #0a84ff 0%, #bf5af2 100%)';
+      return 'linear-gradient(135deg, #ffffff 0%, #808080 100%)';
     case 'cityscape':
-      return 'linear-gradient(135deg, #1c1c1e 0%, #0a84ff 60%, #ff375f 100%)';
+      return 'linear-gradient(135deg, #0a0a0a 0%, #4a4a4a 60%, #b0b0b0 100%)';
     case 'geometric':
-      return 'linear-gradient(135deg, #30d158 0%, #0a84ff 50%, #bf5af2 100%)';
+      return 'linear-gradient(135deg, #d0d0d0 0%, #707070 50%, #303030 100%)';
     default:
       return 'linear-gradient(135deg, #1c1c1e, #3a3a3c)';
   }

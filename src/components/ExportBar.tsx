@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Copy, FileCode2, FileImage, FileText, Share2 } from 'lucide-react';
+import { Check, Copy, FileCode2, FileImage, FileText, Share2, Film } from 'lucide-react';
 import type { AsciiFrame, AsciiOptions } from '../lib/asciiConverter';
 import {
   copyText,
@@ -24,6 +24,7 @@ export function ExportBar({ frame, options, compact }: Props) {
     foreground: options.fgColor,
     fontSize: options.fontSize,
     color: options.color,
+    scale: options.exportScale,
   };
 
   const handleCopy = async () => {
@@ -45,6 +46,47 @@ export function ExportBar({ frame, options, compact }: Props) {
       }),
     );
     w.document.close();
+  };
+
+  const handleExportAnimation = async () => {
+    if (!frame?.cells) return;
+    const { GifEncoder } = await import('../lib/gifEncoder');
+    const { frameCanvasSize, renderFrameToCanvas } = await import('../lib/videoRecorder');
+    const { CHARSETS } = await import('../lib/charsets');
+    const ramp = options.charset === 'custom'
+      ? options.customRamp
+      : CHARSETS[options.charset as keyof typeof CHARSETS]?.ramp ?? '@%#*+=-:. ';
+
+    const fontSize = options.fontSize * (options.exportScale || 1);
+    const size = frameCanvasSize(frame, fontSize);
+    const encoder = new GifEncoder(size.width, size.height, options.animSpeed || 5);
+    const canvas = document.createElement('canvas');
+    canvas.width = size.width; canvas.height = size.height;
+    const ctx = canvas.getContext('2d')!;
+
+    const numFrames = Math.min(30, options.animSpeed * 3);
+    for (let i = 0; i < numFrames; i++) {
+      const mutated = frame.cells!.map(row =>
+        row.map(c => c.char === ' ' ? c : {
+          ...c,
+          char: Math.random() < 0.15 ? ramp[Math.floor(Math.random() * ramp.length)] : c.char,
+        })
+      );
+      renderFrameToCanvas(ctx, { ...frame, cells: mutated }, {
+        fontSize,
+        bgColor: options.bgColor,
+        fgColor: options.fgColor,
+        color: options.color,
+      });
+      encoder.addFrame(ctx);
+    }
+
+    const blob = await encoder.render();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'ascii-pro-animated.webm';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   if (compact) {
@@ -147,14 +189,27 @@ export function ExportBar({ frame, options, compact }: Props) {
 
         <button
           type="button"
-          className="btn btn-primary btn-sm"
+          className="btn btn-grain btn-sm"
           disabled={disabled}
           onClick={() => frame && downloadPng(frame, exportOpts)}
           title="Save as PNG image"
         >
-          <FileImage className="w-3.5 h-3.5" strokeWidth={1.75} />
-          <span>Save Image</span>
+          <FileImage className="w-3.5 h-3.5 relative z-[2]" strokeWidth={1.75} />
+          <span className="relative z-[2]">Save Image</span>
         </button>
+
+        {options.animatedAscii && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={disabled}
+            onClick={() => frame && handleExportAnimation()}
+            title="Export animated video"
+          >
+            <Film className="w-3.5 h-3.5" strokeWidth={1.75} />
+            <span>Anim</span>
+          </button>
+        )}
       </div>
     </div>
   );

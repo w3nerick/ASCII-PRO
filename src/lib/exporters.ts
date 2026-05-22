@@ -60,15 +60,16 @@ export function downloadHtml(
 }
 
 /**
- * Render the ASCII frame to a PNG image.
+ * Render the ASCII frame to a PNG image at optional higher resolution.
  * Works for both color and mono modes.
  */
 export function frameToPngBlob(
   frame: AsciiFrame,
-  opts: { background: string; foreground: string; fontSize?: number; color?: boolean },
+  opts: { background: string; foreground: string; fontSize?: number; color?: boolean; scale?: number },
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const fontSize = opts.fontSize ?? 12;
+    const scale = opts.scale ?? 1;
+    const fontSize = (opts.fontSize ?? 12) * scale;
     const size = frameCanvasSize(frame, fontSize);
     const canvas = document.createElement('canvas');
     canvas.width = size.width;
@@ -89,7 +90,7 @@ export function frameToPngBlob(
 
 export async function downloadPng(
   frame: AsciiFrame,
-  opts: { background: string; foreground: string; fontSize?: number; color?: boolean } = {
+  opts: { background: string; foreground: string; fontSize?: number; color?: boolean; scale?: number } = {
     background: '#05010d',
     foreground: '#00fff5',
   },
