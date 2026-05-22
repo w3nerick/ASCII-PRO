@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { ChevronRight, RotateCcw } from 'lucide-react';
 import { CHARSET_KEYS, charsetLabel, type CharsetKey } from '../lib/charsets';
-import type { AsciiOptions, RenderMode, ColorPalette, AspectRatio } from '../lib/asciiConverter';
+import type { AsciiOptions, RenderMode, ColorPalette, AspectRatio, BlendMode } from '../lib/asciiConverter';
 
 interface Props {
   options: AsciiOptions;
@@ -78,6 +78,22 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
               { value: 'text', label: 'Text' },
               { value: 'filled_circle', label: 'Dots' },
               { value: 'filled_square', label: 'Squares' },
+              { value: 'triangle', label: 'Triangles' },
+              { value: 'diamond', label: 'Diamonds' },
+              { value: 'cross', label: 'Crosses' },
+              { value: 'heart', label: 'Hearts' },
+            ]}
+          />
+        </Row>
+        <Row label="Blend">
+          <Select
+            value={options.blendMode}
+            onChange={v => set('blendMode', v as BlendMode)}
+            options={[
+              { value: 'normal', label: 'Normal' },
+              { value: 'screen', label: 'Screen' },
+              { value: 'multiply', label: 'Multiply' },
+              { value: 'overlay', label: 'Overlay' },
             ]}
           />
         </Row>

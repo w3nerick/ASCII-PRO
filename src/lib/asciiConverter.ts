@@ -1,8 +1,9 @@
 import { CHARSETS, type CharsetKey } from './charsets';
 
-export type RenderMode = 'text' | 'filled_circle' | 'filled_square';
+export type RenderMode = 'text' | 'filled_circle' | 'filled_square' | 'triangle' | 'diamond' | 'cross' | 'heart' | 'pixel' | 'lego' | 'mosaic' | 'cube' | 'mixed';
 export type ColorPalette = 'original' | 'warm' | 'cool' | 'cyberpunk' | 'neon' | 'sunset';
 export type AspectRatio = 'free' | '1:1' | '4:5' | '9:16' | '16:9' | '3:1';
+export type BlendMode = 'normal' | 'screen' | 'multiply' | 'overlay';
 
 export interface AsciiOptions {
   /* ---- Conversion options (changing any of these requires re-running) ---- */
@@ -25,6 +26,7 @@ export interface AsciiOptions {
   bgColor: string;
   fgColor: string;
   renderMode: RenderMode;
+  blendMode: BlendMode;
   // Background mode
   bgMode: 'solid' | 'blurred' | 'original' | 'transparent';
   bgBlur: number;       // 0..60 px — only for 'blurred' mode
@@ -59,6 +61,8 @@ export interface AsciiOptions {
   fx_bloom_intensity: number;       // 0..100
   fx_grain: boolean;
   fx_grain_intensity: number;       // 0..100
+  fx_crt: boolean;
+  fx_crt_intensity: number;         // 0..100
 }
 
 export interface AsciiCell {
@@ -79,31 +83,32 @@ export interface AsciiFrame {
 const CHAR_ASPECT = 0.5;
 
 export const DEFAULT_OPTIONS: AsciiOptions = {
-  width: 220,
+  width: 180,
   charset: 'ascii_magic',
   customRamp: '@%#*+=-:. ',
   invert: false,
   color: true,
-  brightness: 0,
-  contrast: 10,
-  saturation: 20,
-  colorEnhance: 20,
+  brightness: 5,
+  contrast: 15,
+  saturation: 30,
+  colorEnhance: 35,
   blur: 0,
   edges: false,
   edgeThreshold: 60,
   dithering: false,
   density: 1,
-  fontSize: 9,
+  fontSize: 10,
   bgColor: '#000000',
   fgColor: '#ffffff',
   renderMode: 'text',
-  bgMode: 'original',
-  bgBlur: 0,
-  bgOpacity: 90,
+  blendMode: 'normal',
+  bgMode: 'blurred',
+  bgBlur: 6,
+  bgOpacity: 25,
   charOpacity: 100,
-  coverage: 85,
-  charGlow: 0,
-  charBrightness: 100,
+  coverage: 90,
+  charGlow: 45,
+  charBrightness: 160,
   colorPalette: 'original',
   gradientMap: false,
   gradientStart: '#0066ff',
@@ -114,16 +119,18 @@ export const DEFAULT_OPTIONS: AsciiOptions = {
   animSpeed: 3,
   fx_scanlines: false,
   fx_scanlines_intensity: 40,
-  fx_vignette: false,
-  fx_vignette_intensity: 50,
+  fx_vignette: true,
+  fx_vignette_intensity: 30,
   fx_glitch: false,
   fx_glitch_intensity: 30,
-  fx_chromatic: false,
-  fx_chromatic_px: 3,
-  fx_bloom: false,
-  fx_bloom_intensity: 40,
+  fx_chromatic: true,
+  fx_chromatic_px: 2,
+  fx_bloom: true,
+  fx_bloom_intensity: 35,
   fx_grain: false,
   fx_grain_intensity: 25,
+  fx_crt: false,
+  fx_crt_intensity: 40,
 };
 
 /**

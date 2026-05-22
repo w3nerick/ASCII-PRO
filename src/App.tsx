@@ -6,6 +6,7 @@ import { MediaStage, type MediaStageHandle } from './components/MediaStage';
 import { ExportBar } from './components/ExportBar';
 import { HelpModal } from './components/HelpModal';
 import { MobileSheet } from './components/MobileSheet';
+import { Gallery } from './components/Gallery';
 import { DEFAULT_OPTIONS, type AsciiOptions, type AsciiFrame } from './lib/asciiConverter';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { copyText } from './lib/exporters';
@@ -14,6 +15,7 @@ export default function App() {
   const [options, setOptions] = useState<AsciiOptions>(DEFAULT_OPTIONS);
   const [frame, setFrame] = useState<AsciiFrame | null>(null);
   const [help, setHelp] = useState(false);
+  const [gallery, setGallery] = useState(false);
   const [mobileControls, setMobileControls] = useState(false);
   const stageRef = useRef<MediaStageHandle | null>(null);
 
@@ -37,17 +39,17 @@ export default function App() {
 
   return (
     <div className="flex flex-col" style={{ height: '100dvh', background: 'var(--bg)', overflow: 'hidden' }}>
-      <Header onHelp={() => setHelp(true)} />
+      <Header onHelp={() => setHelp(true)} onGallery={() => setGallery(true)} />
 
       {/* Desktop layout */}
       <div className="hidden md:flex flex-1 min-h-0">
-        <div className="flex flex-col flex-1 min-w-0 p-4 gap-3">
+        <div className="flex flex-col flex-1 min-w-0 p-4 gap-3 fade-in-up">
           <MediaStage ref={stageRef} options={options} onFrame={setFrame} />
           <ExportBar frame={frame} options={options} />
         </div>
         <div
-          className="shrink-0 border-l flex flex-col overflow-hidden"
-          style={{ width: 280, background: 'var(--bg-elevated)', borderColor: 'var(--separator)' }}
+          className="shrink-0 border-l flex flex-col overflow-hidden slide-in-right"
+          style={{ width: 280, background: 'var(--bg-elevated)', borderColor: 'var(--separator)', animationDelay: '150ms' }}
         >
           <ControlPanel
             options={options}
@@ -87,6 +89,7 @@ export default function App() {
       </MobileSheet>
 
       <HelpModal open={help} onClose={() => setHelp(false)} />
+      <Gallery open={gallery} onClose={() => setGallery(false)} />
     </div>
   );
 }

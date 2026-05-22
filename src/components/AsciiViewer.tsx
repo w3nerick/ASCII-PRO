@@ -6,9 +6,10 @@ interface Props {
   frame: AsciiFrame | null;
   options: AsciiOptions;
   sourceEl?: HTMLImageElement | HTMLVideoElement | null;
+  onCanvasReady?: (canvas: HTMLCanvasElement) => void;
 }
 
-export function AsciiViewer({ frame, options, sourceEl }: Props) {
+export function AsciiViewer({ frame, options, sourceEl, onCanvasReady }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const sourceRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
   const animRef = useRef<number | null>(null);
@@ -65,12 +66,14 @@ export function AsciiViewer({ frame, options, sourceEl }: Props) {
   return (
     <div className="h-full w-full overflow-hidden flex items-center justify-center"
       style={{ background: bgStyle }}>
-      <canvas ref={canvasRef} style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+      <canvas ref={(el) => {
+        canvasRef.current = el;
+        if (el && onCanvasReady) onCanvasReady(el);
+      }} style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
     </div>
   );
 }
 
-// ── COLOR PALETTES ──────────────────────────────────────
 function applyPalette(r: number, g: number, b: number, palette: ColorPalette): [number, number, number] {
   if (palette === 'original') return [r, g, b];
   switch (palette) {
@@ -128,7 +131,6 @@ function applyGradientMap(r: number, g: number, b: number, start: string, end: s
   ];
 }
 
-// ── CORE RENDERER ────────────────────────────────────────
 function renderToCanvas(
   canvas: HTMLCanvasElement,
   frame: AsciiFrame | null,
@@ -163,7 +165,7 @@ function renderToCanvas(
     cssW = sw > 0 ? sw : frame.cols * 8;
     cssH = sh > 0 ? sh : frame.rows * 14;
   } else {
-    const charW = options.fontSize * 0.6;
+    const charW = options.fontSize * 0.7;
     cssW = frame.cols * charW + 24;
     cssH = frame.rows * options.fontSize + 24;
   }
@@ -174,7 +176,6 @@ function renderToCanvas(
   canvas.style.height = `${cssH}px`;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // ── BACKGROUND ────────────────────────────────────────
   if (options.bgMode === 'transparent') {
     ctx.clearRect(0, 0, cssW, cssH);
   } else if (options.bgMode === 'original' && src) {
@@ -194,15 +195,18 @@ function renderToCanvas(
     ctx.fillRect(0, 0, cssW, cssH);
   }
 
-  // ── ASCII CHARS ───────────────────────────────────────
   ctx.globalAlpha = options.charOpacity / 100;
 
-  const glowRadius = options.charGlow / 100 * 12;
+  if (options.blendMode && options.blendMode !== 'normal') {
+    ctx.globalCompositeOperation = options.blendMode as GlobalCompositeOperation;
+  }
+
+  const glowRadius = options.charGlow / 100 * 20;
   const brightMul = options.charBrightness / 100;
   const palette = options.colorPalette;
   const useGradient = options.gradientMap;
 
-  function processColor(r: number, g: number, b: number): string {
+  function processColorRaw(r: number, g: number, b: number): [number, number, number] {
     let pr: number, pg: number, pb: number;
     if (useGradient) {
       [pr, pg, pb] = applyGradientMap(r, g, b, options.gradientStart, options.gradientEnd);
@@ -214,10 +218,15 @@ function renderToCanvas(
       pg = Math.min(255, Math.round(pg * brightMul));
       pb = Math.min(255, Math.round(pb * brightMul));
     }
-    return `rgb(${pr | 0},${pg | 0},${pb | 0})`;
+    return [pr | 0, pg | 0, pb | 0];
   }
 
-  const renderMode = options.renderMode;
+  function processColor(r: number, g: number, b: number): string {
+    const [pr, pg, pb] = processColorRaw(r, g, b);
+    return `rgb(${pr},${pg},${pb})`;
+  }
+
+  const renderMode = options.renderMode as string;
 
   if (isOverlay) {
     const cellW = cssW / frame.cols;
@@ -254,8 +263,176 @@ function renderToCanvas(
             ctx.fillRect(x * cellW + off, y * cellH + off, sz, sz);
           }
         }
+      } else if (renderMode === 'triangle') {
+        const sz = Math.min(cellW, cellH) * 0.8;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const cx = x * cellW + cellW / 2;
+            const cy = y * cellH + cellH / 2;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - sz / 2);
+            ctx.lineTo(cx - sz / 2, cy + sz / 2);
+            ctx.lineTo(cx + sz / 2, cy + sz / 2);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'diamond') {
+        const sz = Math.min(cellW, cellH) * 0.45;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const cx = x * cellW + cellW / 2;
+            const cy = y * cellH + cellH / 2;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - sz);
+            ctx.lineTo(cx + sz, cy);
+            ctx.lineTo(cx, cy + sz);
+            ctx.lineTo(cx - sz, cy);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'cross') {
+        const sz = Math.min(cellW, cellH) * 0.8;
+        const arm = sz * 0.3;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const cx = x * cellW + cellW / 2;
+            const cy = y * cellH + cellH / 2;
+            ctx.fillRect(cx - sz / 2, cy - arm / 2, sz, arm);
+            ctx.fillRect(cx - arm / 2, cy - sz / 2, arm, sz);
+          }
+        }
+      } else if (renderMode === 'heart') {
+        const sz = Math.min(cellW, cellH) * 0.35;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const cx = x * cellW + cellW / 2;
+            const cy = y * cellH + cellH / 2;
+            ctx.beginPath();
+            ctx.arc(cx - sz * 0.5, cy - sz * 0.2, sz * 0.55, Math.PI, 0, false);
+            ctx.arc(cx + sz * 0.5, cy - sz * 0.2, sz * 0.55, Math.PI, 0, false);
+            ctx.lineTo(cx, cy + sz * 1.2);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'pixel') {
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            ctx.fillRect(x * cellW, y * cellH, cellW, cellH);
+          }
+        }
+      } else if (renderMode === 'lego') {
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const px = x * cellW; const py = y * cellH;
+            ctx.fillRect(px + 0.5, py + 0.5, cellW - 1, cellH - 1);
+            ctx.globalAlpha = (options.charOpacity / 100) * 0.4;
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            const studR = Math.min(cellW, cellH) * 0.28;
+            ctx.beginPath();
+            ctx.arc(px + cellW / 2, py + cellH / 2, studR, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = options.charOpacity / 100;
+            ctx.fillStyle = col;
+            cur = col;
+          }
+        }
+      } else if (renderMode === 'mosaic') {
+        const gap = Math.max(1, Math.min(cellW, cellH) * 0.12);
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const px = x * cellW + gap / 2; const py = y * cellH + gap / 2;
+            const tw = cellW - gap; const th = cellH - gap;
+            ctx.beginPath();
+            ctx.roundRect(px, py, tw, th, Math.min(tw, th) * 0.15);
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'cube') {
+        const sz = Math.min(cellW, cellH) * 0.45;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const [pr, pg, pb] = processColorRaw(c.r, c.g, c.b);
+            const cx = x * cellW + cellW / 2; const cy = y * cellH + cellH / 2;
+            // Top face (lighter)
+            ctx.fillStyle = `rgb(${Math.min(255, pr + 40)},${Math.min(255, pg + 40)},${Math.min(255, pb + 40)})`;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - sz); ctx.lineTo(cx + sz, cy - sz * 0.4);
+            ctx.lineTo(cx, cy + sz * 0.2); ctx.lineTo(cx - sz, cy - sz * 0.4);
+            ctx.closePath(); ctx.fill();
+            // Right face (original)
+            ctx.fillStyle = `rgb(${pr},${pg},${pb})`;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy + sz * 0.2); ctx.lineTo(cx + sz, cy - sz * 0.4);
+            ctx.lineTo(cx + sz, cy + sz * 0.3); ctx.lineTo(cx, cy + sz * 0.9);
+            ctx.closePath(); ctx.fill();
+            // Left face (darker)
+            ctx.fillStyle = `rgb(${Math.max(0, pr - 50)},${Math.max(0, pg - 50)},${Math.max(0, pb - 50)})`;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy + sz * 0.2); ctx.lineTo(cx - sz, cy - sz * 0.4);
+            ctx.lineTo(cx - sz, cy + sz * 0.3); ctx.lineTo(cx, cy + sz * 0.9);
+            ctx.closePath(); ctx.fill();
+            if (glowRadius > 0) { ctx.shadowColor = `rgb(${pr},${pg},${pb})`; }
+          }
+        }
+      } else if (renderMode === 'mixed') {
+        const mixChars = '@#$%&*+=?!';
+        const fs = Math.max(2, Math.min(cellW / 0.65, cellH * 0.95));
+        ctx.font = `bold ${fs}px "Courier New", Courier, monospace`;
+        ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const rndChar = mixChars[(x * 7 + y * 13) % mixChars.length];
+            ctx.fillText(rndChar, x * cellW, y * cellH);
+          }
+        }
       } else {
-        const fs = Math.max(2, Math.min(cellW / 0.55, cellH * 0.95));
+        const fs = Math.max(2, Math.min(cellW / 0.65, cellH * 0.95));
         ctx.font = `${fs}px "Courier New", Courier, monospace`;
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
@@ -273,7 +450,7 @@ function renderToCanvas(
       ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
     }
   } else {
-    const charW = options.fontSize * 0.6;
+    const charW = options.fontSize * 0.7;
     const lineH = options.fontSize;
     const pad = 12;
 
@@ -307,6 +484,80 @@ function renderToCanvas(
             ctx.fillRect(pad + x * charW, pad + y * lineH + (lineH - sz) / 2, sz, sz);
           }
         }
+      } else if (renderMode === 'triangle') {
+        const sz = Math.min(charW, lineH) * 0.75;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const cx = pad + x * charW + charW / 2;
+            const cy = pad + y * lineH + lineH / 2;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - sz / 2);
+            ctx.lineTo(cx - sz / 2, cy + sz / 2);
+            ctx.lineTo(cx + sz / 2, cy + sz / 2);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'diamond') {
+        const sz = Math.min(charW, lineH) * 0.42;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const cx = pad + x * charW + charW / 2;
+            const cy = pad + y * lineH + lineH / 2;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - sz);
+            ctx.lineTo(cx + sz, cy);
+            ctx.lineTo(cx, cy + sz);
+            ctx.lineTo(cx - sz, cy);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'cross') {
+        const sz = Math.min(charW, lineH) * 0.75;
+        const arm = sz * 0.3;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const cx = pad + x * charW + charW / 2;
+            const cy = pad + y * lineH + lineH / 2;
+            ctx.fillRect(cx - sz / 2, cy - arm / 2, sz, arm);
+            ctx.fillRect(cx - arm / 2, cy - sz / 2, arm, sz);
+          }
+        }
+      } else if (renderMode === 'heart') {
+        const sz = Math.min(charW, lineH) * 0.32;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const col = processColor(c.r, c.g, c.b);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const cx = pad + x * charW + charW / 2;
+            const cy = pad + y * lineH + lineH / 2;
+            ctx.beginPath();
+            ctx.arc(cx - sz * 0.5, cy - sz * 0.2, sz * 0.55, Math.PI, 0, false);
+            ctx.arc(cx + sz * 0.5, cy - sz * 0.2, sz * 0.55, Math.PI, 0, false);
+            ctx.lineTo(cx, cy + sz * 1.2);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
       } else {
         ctx.font = `${options.fontSize}px "Share Tech Mono", "SF Mono", ui-monospace, monospace`;
         ctx.textBaseline = 'top'; ctx.textAlign = 'left';
@@ -332,9 +583,9 @@ function renderToCanvas(
     }
   }
 
+  ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
 
-  // ── POST-FX ──────────────────────────────────────────
   applyPostFX(ctx, cssW, cssH, options);
 }
 

@@ -1,10 +1,11 @@
-import { Github, Keyboard, Sparkles } from 'lucide-react';
+import { Github, Image, Keyboard, Sparkles } from 'lucide-react';
 
 interface Props {
   onHelp?: () => void;
+  onGallery?: () => void;
 }
 
-export function Header({ onHelp }: Props) {
+export function Header({ onHelp, onGallery }: Props) {
   return (
     <header className="toolbar sticky top-0 z-30">
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 h-12 md:h-14 flex items-center justify-between gap-3">
@@ -25,6 +26,17 @@ export function Header({ onHelp }: Props) {
         </div>
 
         <div className="flex items-center gap-1">
+          {onGallery && (
+            <button
+              type="button"
+              onClick={onGallery}
+              className="btn btn-ghost btn-sm btn-icon"
+              title="Gallery"
+              aria-label="Gallery"
+            >
+              <Image className="w-4 h-4" strokeWidth={1.75} />
+            </button>
+          )}
           {onHelp && (
             <button
               type="button"

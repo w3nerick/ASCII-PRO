@@ -6,8 +6,10 @@ import {
   useState,
 } from 'react';
 import {
+  Bookmark,
   CameraOff,
   Circle,
+  Columns,
   Maximize2,
   Minimize2,
   Pause,
@@ -19,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Dropzone } from './Dropzone';
 import { AsciiViewer } from './AsciiViewer';
+import { CompareSlider } from './CompareSlider';
 import {
   type AsciiFrame,
   type AsciiOptions,
@@ -32,6 +35,7 @@ import { AsciiVideoRecorder } from '../lib/videoRecorder';
 import { downloadVideoBlob } from '../lib/exporters';
 import { generateDemoImage } from '../lib/demoImage';
 import { buildZip } from '../lib/zip';
+import { saveToGallery, canvasThumbnail } from '../lib/gallery';
 
 type Mode = 'idle' | 'image' | 'video' | 'webcam';
 
@@ -69,8 +73,10 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
   const [fullscreen, setFullscreen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
   const [sourceEl, setSourceEl] = useState<HTMLImageElement | HTMLVideoElement | null>(null);
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
+  const asciiCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -346,7 +352,6 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
         <Dropzone
           onFile={handleFile}
           onBatch={handleBatch}
-          onDemoImage={(img) => loadDemo(img)}
           onWebcam={startWebcam}
         />
       ) : (
@@ -390,16 +395,41 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
                 </>
               )}
               {mode === 'image' && (
-                <button
-                  type="button"
-                  onClick={() => setShowOriginal((v) => !v)}
-                  title="Toggle original / ASCII"
-                  className={`btn btn-sm ${showOriginal ? 'btn-primary' : 'btn-ghost'}`}
-                >
-                  {showOriginal
-                    ? <><ToggleRight className="w-3.5 h-3.5" strokeWidth={2} /> Original</>
-                    : <><ToggleLeft className="w-3.5 h-3.5" strokeWidth={2} /> Original</>}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { setShowOriginal((v) => !v); setCompareMode(false); }}
+                    title="Toggle original / ASCII"
+                    className={`btn btn-sm ${showOriginal ? 'btn-primary' : 'btn-ghost'}`}
+                  >
+                    {showOriginal
+                      ? <><ToggleRight className="w-3.5 h-3.5" strokeWidth={2} /> Original</>
+                      : <><ToggleLeft className="w-3.5 h-3.5" strokeWidth={2} /> Original</>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCompareMode(v => !v); setShowOriginal(false); }}
+                    title="Compare slider"
+                    className={`btn btn-sm ${compareMode ? 'btn-primary' : 'btn-ghost'}`}
+                  >
+                    <Columns className="w-3.5 h-3.5" strokeWidth={2} />
+                    <span className="hidden sm:inline">Compare</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (asciiCanvasRef.current) {
+                        const thumb = canvasThumbnail(asciiCanvasRef.current);
+                        saveToGallery(thumb);
+                      }
+                    }}
+                    title="Save to gallery"
+                    className="btn btn-ghost btn-sm"
+                  >
+                    <Bookmark className="w-3.5 h-3.5" strokeWidth={2} />
+                    <span className="hidden sm:inline">Save</span>
+                  </button>
+                </>
               )}
               <IconButton onClick={toggleFullscreen} title="Fullscreen (F)">
                 {fullscreen ? <Minimize2 className="w-3.5 h-3.5" strokeWidth={2} /> : <Maximize2 className="w-3.5 h-3.5" strokeWidth={2} />}
@@ -418,7 +448,6 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
 
           {/* Output */}
           <div className="flex-1 overflow-hidden relative">
-            {/* Original image preview */}
             {showOriginal && (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/90 fade-in">
                 <canvas
@@ -427,10 +456,14 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
                 />
               </div>
             )}
+            {compareMode && (
+              <CompareSlider sourceEl={sourceEl} canvasEl={asciiCanvasRef.current} />
+            )}
             <AsciiViewer
               frame={frame}
               options={options}
               sourceEl={sourceEl}
+              onCanvasReady={(el) => { asciiCanvasRef.current = el; }}
             />
           </div>
         </div>
