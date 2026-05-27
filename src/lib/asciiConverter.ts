@@ -1,9 +1,19 @@
 import { CHARSETS, type CharsetKey } from './charsets';
 
-export type RenderMode = 'text' | 'filled_circle' | 'filled_square' | 'triangle' | 'diamond' | 'cross' | 'heart' | 'pixel' | 'lego' | 'mosaic' | 'cube' | 'mixed';
+export type RenderMode = 'text' | 'filled_circle' | 'filled_square' | 'triangle' | 'diamond' | 'cross' | 'heart' | 'pixel' | 'lego' | 'mosaic' | 'cube' | 'mixed' | 'hexagon' | 'wave' | 'outline';
 export type ColorPalette = 'original' | 'warm' | 'cool' | 'cyberpunk' | 'neon' | 'sunset';
 export type AspectRatio = 'free' | '1:1' | '4:5' | '9:16' | '16:9' | '3:1';
 export type BlendMode = 'normal' | 'screen' | 'multiply' | 'overlay';
+export type AnimPreset = 'none' | 'wave' | 'cascade' | 'pulse' | 'reveal';
+export type ShapeMask = 'none' | 'circle' | 'heart' | 'star' | 'diamond' | 'hexagon';
+
+export interface PointLight {
+  x: number;  // 0..1 normalized
+  y: number;  // 0..1 normalized
+  radius: number; // 0..1 normalized
+  intensity: number; // 0..2
+  color: string; // hex
+}
 
 export interface AsciiOptions {
   /* ---- Conversion options (changing any of these requires re-running) ---- */
@@ -63,6 +73,21 @@ export interface AsciiOptions {
   fx_grain_intensity: number;       // 0..100
   fx_crt: boolean;
   fx_crt_intensity: number;         // 0..100
+  // Point lights
+  pointLights: PointLight[];
+  pointLightsEnabled: boolean;
+  // Animation presets
+  animPreset: AnimPreset;
+  animPresetSpeed: number;          // 1..10
+  // Shape masking
+  shapeMask: ShapeMask;
+  // Disco mode
+  discoMode: boolean;
+  discoSpeed: number;               // 1..10
+  // Watermark
+  watermark: string;
+  watermarkPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+  watermarkOpacity: number;         // 0..100
 }
 
 export interface AsciiCell {
@@ -131,6 +156,19 @@ export const DEFAULT_OPTIONS: AsciiOptions = {
   fx_grain_intensity: 25,
   fx_crt: false,
   fx_crt_intensity: 40,
+  pointLights: [
+    { x: 0.3, y: 0.3, radius: 0.4, intensity: 1.2, color: '#00aaff' },
+    { x: 0.7, y: 0.7, radius: 0.35, intensity: 1.0, color: '#ff44aa' },
+  ],
+  pointLightsEnabled: false,
+  animPreset: 'none',
+  animPresetSpeed: 5,
+  shapeMask: 'none',
+  discoMode: false,
+  discoSpeed: 3,
+  watermark: '',
+  watermarkPosition: 'bottom-right',
+  watermarkOpacity: 40,
 };
 
 /**

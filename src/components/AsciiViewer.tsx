@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { AsciiFrame, AsciiOptions, ColorPalette } from '../lib/asciiConverter';
+import type { AsciiFrame, AsciiOptions, ColorPalette, PointLight, AnimPreset, ShapeMask } from '../lib/asciiConverter';
 import { CHARSETS } from '../lib/charsets';
 
 interface Props {
@@ -52,13 +52,33 @@ export function AsciiViewer({ frame, options, sourceEl, onCanvasReady }: Props) 
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
   }, [options.animatedAscii, options.animSpeed, frame, options.charset, options.customRamp]);
 
+  const needsContinuousRender = !options.animatedAscii && (options.animPreset !== 'none' || options.discoMode || options.renderMode === 'wave');
+
   useEffect(() => {
     if (options.animatedAscii) return;
+    if (needsContinuousRender) return;
     if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
     const canvas = canvasRef.current;
     if (!canvas) return;
     renderToCanvas(canvas, frame, options, sourceRef.current);
-  }, [frame, options, sourceEl]);
+  }, [frame, options, sourceEl, needsContinuousRender]);
+
+  useEffect(() => {
+    if (options.animatedAscii) return;
+    if (!needsContinuousRender) return;
+    if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const tick = () => {
+      animRef.current = requestAnimationFrame(tick);
+      const f = animFrameRef.current;
+      const o = animOptionsRef.current;
+      if (!f || !canvas) return;
+      renderToCanvas(canvas, f, o, sourceRef.current);
+    };
+    animRef.current = requestAnimationFrame(tick);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [needsContinuousRender, frame, options.animatedAscii]);
 
   const bgStyle = options.bgMode === 'transparent' ? 'transparent'
     : (options.bgMode === 'original' || options.bgMode === 'blurred') ? '#000' : options.bgColor;
@@ -129,6 +149,92 @@ function applyGradientMap(r: number, g: number, b: number, start: string, end: s
     sg + (eg - sg) * lum,
     sb + (eb - sb) * lum,
   ];
+}
+
+function computePointLightFactor(
+  nx: number, ny: number,
+  lights: PointLight[],
+  time: number,
+  disco: boolean,
+  discoSpeed: number,
+): number {
+  let total = 0;
+  for (let i = 0; i < lights.length; i++) {
+    const l = lights[i];
+    let lx = l.x, ly = l.y;
+    if (disco) {
+      const t = time * discoSpeed * 0.001;
+      lx = 0.5 + 0.4 * Math.sin(t + i * 2.1);
+      ly = 0.5 + 0.4 * Math.cos(t * 0.7 + i * 1.7);
+    }
+    const dx = nx - lx, dy = ny - ly;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const falloff = Math.max(0, 1 - dist / Math.max(0.01, l.radius));
+    total += falloff * falloff * l.intensity;
+  }
+  return Math.min(2, total);
+}
+
+function getAnimAlpha(
+  preset: AnimPreset,
+  x: number, y: number,
+  cols: number, rows: number,
+  time: number, speed: number,
+): number {
+  if (preset === 'none') return 1;
+  const t = time * speed * 0.001;
+  switch (preset) {
+    case 'wave': {
+      const phase = (x / cols) * Math.PI * 2 + t;
+      return 0.5 + 0.5 * Math.sin(phase);
+    }
+    case 'cascade': {
+      const delay = (y / rows) * 3;
+      const v = ((t - delay) % 4) / 4;
+      return v < 0 ? 0 : Math.min(1, v * 3);
+    }
+    case 'pulse': {
+      const cx = cols / 2, cy = rows / 2;
+      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / Math.sqrt(cx * cx + cy * cy);
+      const wave = Math.sin((dist * 6 - t * 2)) * 0.5 + 0.5;
+      return wave;
+    }
+    case 'reveal': {
+      const progress = ((t * 0.5) % 2);
+      const threshold = (x + y) / (cols + rows) * 2;
+      return progress > threshold ? 1 : 0;
+    }
+    default: return 1;
+  }
+}
+
+function isInsideShapeMask(
+  nx: number, ny: number,
+  mask: ShapeMask,
+): boolean {
+  if (mask === 'none') return true;
+  const cx = nx - 0.5, cy = ny - 0.5;
+  switch (mask) {
+    case 'circle':
+      return (cx * cx + cy * cy) <= 0.25;
+    case 'heart': {
+      const hx = cx * 2.2, hy = -(cy * 2.2 - 0.3);
+      return (hx * hx + hy * hy - 1) ** 3 - hx * hx * hy * hy * hy <= 0;
+    }
+    case 'star': {
+      const angle = Math.atan2(cy, cx);
+      const dist = Math.sqrt(cx * cx + cy * cy);
+      const r = 0.4 * (0.5 + 0.5 * Math.cos(5 * angle));
+      return dist <= r;
+    }
+    case 'diamond':
+      return (Math.abs(cx) + Math.abs(cy)) <= 0.45;
+    case 'hexagon': {
+      const hx = Math.abs(cx), hy = Math.abs(cy);
+      return (hx <= 0.42) && (hy <= 0.42 - hx * 0.5);
+    }
+    default: return true;
+  }
 }
 
 function renderToCanvas(
@@ -206,27 +312,67 @@ function renderToCanvas(
   const palette = options.colorPalette;
   const useGradient = options.gradientMap;
 
-  function processColorRaw(r: number, g: number, b: number): [number, number, number] {
+  function processColorRaw(r: number, g: number, b: number, lightFactor?: number): [number, number, number] {
     let pr: number, pg: number, pb: number;
     if (useGradient) {
       [pr, pg, pb] = applyGradientMap(r, g, b, options.gradientStart, options.gradientEnd);
     } else {
       [pr, pg, pb] = applyPalette(r, g, b, palette);
     }
-    if (brightMul !== 1) {
-      pr = Math.min(255, Math.round(pr * brightMul));
-      pg = Math.min(255, Math.round(pg * brightMul));
-      pb = Math.min(255, Math.round(pb * brightMul));
+    const mul = brightMul * (lightFactor ?? 1);
+    if (mul !== 1) {
+      pr = Math.min(255, Math.round(pr * mul));
+      pg = Math.min(255, Math.round(pg * mul));
+      pb = Math.min(255, Math.round(pb * mul));
     }
     return [pr | 0, pg | 0, pb | 0];
   }
 
-  function processColor(r: number, g: number, b: number): string {
-    const [pr, pg, pb] = processColorRaw(r, g, b);
+  function processColor(r: number, g: number, b: number, lightFactor?: number): string {
+    const [pr, pg, pb] = processColorRaw(r, g, b, lightFactor);
     return `rgb(${pr},${pg},${pb})`;
   }
 
+  function shouldRenderCell(x: number, y: number, cols: number, rows: number): number {
+    const nx = cols > 1 ? x / (cols - 1) : 0.5;
+    const ny = rows > 1 ? y / (rows - 1) : 0.5;
+    if (hasMask && !isInsideShapeMask(nx, ny, options.shapeMask)) return 0;
+    let alpha = 1;
+    if (hasAnim) alpha *= getAnimAlpha(options.animPreset, x, y, cols, rows, now, options.animPresetSpeed);
+    return alpha;
+  }
+
+  function getLightFactor(x: number, y: number, cols: number, rows: number): number {
+    if (!hasLights) return 1;
+    const nx = cols > 1 ? x / (cols - 1) : 0.5;
+    const ny = rows > 1 ? y / (rows - 1) : 0.5;
+    return computePointLightFactor(nx, ny, options.pointLights, now, options.discoMode, options.discoSpeed);
+  }
+
   const renderMode = options.renderMode as string;
+  const hasLights = options.pointLightsEnabled && options.pointLights.length > 0;
+  const hasAnim = options.animPreset !== 'none';
+  const hasMask = options.shapeMask !== 'none';
+  const now = performance.now();
+
+  // Pre-compute per-cell alpha and light factor for mask/anim/lights
+  let cellAlphas: Float32Array | null = null;
+  let cellLights: Float32Array | null = null;
+  if (frame.cells && (hasMask || hasAnim || hasLights)) {
+    const total = frame.cols * frame.rows;
+    if (hasMask || hasAnim) {
+      cellAlphas = new Float32Array(total);
+      for (let y = 0; y < frame.rows; y++)
+        for (let x = 0; x < frame.cols; x++)
+          cellAlphas[y * frame.cols + x] = shouldRenderCell(x, y, frame.cols, frame.rows);
+    }
+    if (hasLights) {
+      cellLights = new Float32Array(total);
+      for (let y = 0; y < frame.rows; y++)
+        for (let x = 0; x < frame.cols; x++)
+          cellLights[y * frame.cols + x] = getLightFactor(x, y, frame.cols, frame.rows);
+    }
+  }
 
   if (isOverlay) {
     const cellW = cssW / frame.cols;
@@ -235,6 +381,7 @@ function renderToCanvas(
     if (frame.cells) {
       if (glowRadius > 0) ctx.shadowBlur = glowRadius;
       let cur = '';
+      const baseAlpha = options.charOpacity / 100;
 
       if (renderMode === 'filled_circle') {
         const radius = Math.min(cellW, cellH) * 0.4;
@@ -243,7 +390,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             ctx.beginPath();
             ctx.arc(x * cellW + cellW / 2, y * cellH + cellH / 2, radius, 0, Math.PI * 2);
@@ -258,7 +410,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             ctx.fillRect(x * cellW + off, y * cellH + off, sz, sz);
           }
@@ -270,7 +427,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             const cx = x * cellW + cellW / 2;
             const cy = y * cellH + cellH / 2;
@@ -289,7 +451,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             const cx = x * cellW + cellW / 2;
             const cy = y * cellH + cellH / 2;
@@ -310,7 +477,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             const cx = x * cellW + cellW / 2;
             const cy = y * cellH + cellH / 2;
@@ -325,7 +497,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             const cx = x * cellW + cellW / 2;
             const cy = y * cellH + cellH / 2;
@@ -343,7 +520,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             ctx.fillRect(x * cellW, y * cellH, cellW, cellH);
           }
@@ -354,7 +536,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             const px = x * cellW; const py = y * cellH;
             ctx.fillRect(px + 0.5, py + 0.5, cellW - 1, cellH - 1);
@@ -376,7 +563,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             const px = x * cellW + gap / 2; const py = y * cellH + gap / 2;
             const tw = cellW - gap; const th = cellH - gap;
@@ -392,7 +584,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const [pr, pg, pb] = processColorRaw(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const [pr, pg, pb] = processColorRaw(c.r, c.g, c.b, lf);
             const cx = x * cellW + cellW / 2; const cy = y * cellH + cellH / 2;
             // Top face (lighter)
             ctx.fillStyle = `rgb(${Math.min(255, pr + 40)},${Math.min(255, pg + 40)},${Math.min(255, pb + 40)})`;
@@ -415,6 +612,75 @@ function renderToCanvas(
             if (glowRadius > 0) { ctx.shadowColor = `rgb(${pr},${pg},${pb})`; }
           }
         }
+      } else if (renderMode === 'hexagon') {
+        const sz = Math.min(cellW, cellH) * 0.42;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const hx = x * cellW + cellW / 2;
+            const hy = y * cellH + cellH / 2;
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+              const angle = (Math.PI / 3) * i - Math.PI / 6;
+              const px = hx + sz * Math.cos(angle);
+              const py = hy + sz * Math.sin(angle);
+              if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'wave') {
+        const sz = Math.min(cellW, cellH) * 0.4;
+        const time = now * 0.002;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const waveOffset = Math.sin(x * 0.3 + y * 0.2 + time) * sz * 0.5;
+            const radius = sz * (0.6 + 0.4 * Math.sin(x * 0.5 + y * 0.3 + time * 1.5));
+            ctx.beginPath();
+            ctx.arc(x * cellW + cellW / 2, y * cellH + cellH / 2 + waveOffset, radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'outline') {
+        const sz = Math.min(cellW, cellH) * 0.38;
+        ctx.lineWidth = Math.max(1, sz * 0.2);
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.strokeStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            ctx.beginPath();
+            ctx.arc(x * cellW + cellW / 2, y * cellH + cellH / 2, sz, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
       } else if (renderMode === 'mixed') {
         const mixChars = '@#$%&*+=?!';
         const fs = Math.max(2, Math.min(cellW / 0.65, cellH * 0.95));
@@ -425,7 +691,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             const rndChar = mixChars[(x * 7 + y * 13) % mixChars.length];
             ctx.fillText(rndChar, x * cellW, y * cellH);
@@ -441,7 +712,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             ctx.fillText(c.char, x * cellW, y * cellH);
           }
@@ -457,6 +733,7 @@ function renderToCanvas(
     if (frame.cells) {
       if (glowRadius > 0) ctx.shadowBlur = glowRadius;
       let cur = '';
+      const baseAlpha = options.charOpacity / 100;
 
       if (renderMode === 'filled_circle') {
         const radius = Math.min(charW, lineH) * 0.38;
@@ -465,7 +742,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             ctx.beginPath();
             ctx.arc(pad + x * charW + charW / 2, pad + y * lineH + lineH / 2, radius, 0, Math.PI * 2);
@@ -479,7 +761,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             ctx.fillRect(pad + x * charW, pad + y * lineH + (lineH - sz) / 2, sz, sz);
           }
@@ -491,7 +778,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             const cx = pad + x * charW + charW / 2;
             const cy = pad + y * lineH + lineH / 2;
@@ -510,7 +802,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             const cx = pad + x * charW + charW / 2;
             const cy = pad + y * lineH + lineH / 2;
@@ -531,7 +828,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             const cx = pad + x * charW + charW / 2;
             const cy = pad + y * lineH + lineH / 2;
@@ -546,7 +848,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             const cx = pad + x * charW + charW / 2;
             const cy = pad + y * lineH + lineH / 2;
@@ -558,6 +865,190 @@ function renderToCanvas(
             ctx.fill();
           }
         }
+      } else if (renderMode === 'pixel') {
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            ctx.fillRect(pad + x * charW, pad + y * lineH, charW, lineH);
+          }
+        }
+      } else if (renderMode === 'lego') {
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const px = pad + x * charW; const py = pad + y * lineH;
+            ctx.fillRect(px + 0.5, py + 0.5, charW - 1, lineH - 1);
+            ctx.globalAlpha = (options.charOpacity / 100) * 0.4;
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            const studR = Math.min(charW, lineH) * 0.28;
+            ctx.beginPath();
+            ctx.arc(px + charW / 2, py + lineH / 2, studR, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = options.charOpacity / 100;
+            ctx.fillStyle = col;
+            cur = col;
+          }
+        }
+      } else if (renderMode === 'mosaic') {
+        const gap = Math.max(1, Math.min(charW, lineH) * 0.12);
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const px = pad + x * charW + gap / 2; const py = pad + y * lineH + gap / 2;
+            const tw = charW - gap; const th = lineH - gap;
+            ctx.beginPath();
+            ctx.roundRect(px, py, tw, th, Math.min(tw, th) * 0.15);
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'cube') {
+        const sz = Math.min(charW, lineH) * 0.45;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const [pr, pg, pb] = processColorRaw(c.r, c.g, c.b, lf);
+            const cx = pad + x * charW + charW / 2; const cy = pad + y * lineH + lineH / 2;
+            ctx.fillStyle = `rgb(${Math.min(255, pr + 40)},${Math.min(255, pg + 40)},${Math.min(255, pb + 40)})`;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - sz); ctx.lineTo(cx + sz, cy - sz * 0.4);
+            ctx.lineTo(cx, cy + sz * 0.2); ctx.lineTo(cx - sz, cy - sz * 0.4);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = `rgb(${pr},${pg},${pb})`;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy + sz * 0.2); ctx.lineTo(cx + sz, cy - sz * 0.4);
+            ctx.lineTo(cx + sz, cy + sz * 0.3); ctx.lineTo(cx, cy + sz * 0.9);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = `rgb(${Math.max(0, pr - 50)},${Math.max(0, pg - 50)},${Math.max(0, pb - 50)})`;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy + sz * 0.2); ctx.lineTo(cx - sz, cy - sz * 0.4);
+            ctx.lineTo(cx - sz, cy + sz * 0.3); ctx.lineTo(cx, cy + sz * 0.9);
+            ctx.closePath(); ctx.fill();
+            if (glowRadius > 0) { ctx.shadowColor = `rgb(${pr},${pg},${pb})`; }
+          }
+        }
+      } else if (renderMode === 'hexagon') {
+        const sz = Math.min(charW, lineH) * 0.42;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const hx = pad + x * charW + charW / 2;
+            const hy = pad + y * lineH + lineH / 2;
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+              const angle = (Math.PI / 3) * i - Math.PI / 6;
+              const px = hx + sz * Math.cos(angle);
+              const py = hy + sz * Math.sin(angle);
+              if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'wave') {
+        const sz = Math.min(charW, lineH) * 0.38;
+        const time = now * 0.002;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const waveOffset = Math.sin(x * 0.3 + y * 0.2 + time) * sz * 0.5;
+            const radius = sz * (0.6 + 0.4 * Math.sin(x * 0.5 + y * 0.3 + time * 1.5));
+            ctx.beginPath();
+            ctx.arc(pad + x * charW + charW / 2, pad + y * lineH + lineH / 2 + waveOffset, radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      } else if (renderMode === 'outline') {
+        const sz = Math.min(charW, lineH) * 0.35;
+        ctx.lineWidth = Math.max(1, sz * 0.2);
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.strokeStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            ctx.beginPath();
+            ctx.arc(pad + x * charW + charW / 2, pad + y * lineH + lineH / 2, sz, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+      } else if (renderMode === 'mixed') {
+        const mixChars = '@#$%&*+=?!';
+        ctx.font = `bold ${options.fontSize}px "Courier New", Courier, monospace`;
+        ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const rndChar = mixChars[(x * 7 + y * 13) % mixChars.length];
+            ctx.fillText(rndChar, pad + x * charW, pad + y * lineH);
+          }
+        }
       } else {
         ctx.font = `${options.fontSize}px "Share Tech Mono", "SF Mono", ui-monospace, monospace`;
         ctx.textBaseline = 'top'; ctx.textAlign = 'left';
@@ -567,7 +1058,12 @@ function renderToCanvas(
           for (let x = 0; x < row.length; x++) {
             const c = row[x];
             if (c.char === ' ') continue;
-            const col = processColor(c.r, c.g, c.b);
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
             if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
             ctx.fillText(c.char, pad + x * charW, py);
           }
@@ -585,6 +1081,26 @@ function renderToCanvas(
 
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
+
+  // Watermark
+  if (options.watermark) {
+    ctx.save();
+    ctx.globalAlpha = options.watermarkOpacity / 100;
+    ctx.font = `bold 14px "Share Tech Mono", monospace`;
+    ctx.fillStyle = '#ffffff';
+    const metrics = ctx.measureText(options.watermark);
+    const margin = 16;
+    let wx: number, wy: number;
+    switch (options.watermarkPosition) {
+      case 'top-left': wx = margin; wy = margin + 14; break;
+      case 'top-right': wx = cssW - metrics.width - margin; wy = margin + 14; break;
+      case 'bottom-left': wx = margin; wy = cssH - margin; break;
+      case 'center': wx = (cssW - metrics.width) / 2; wy = cssH / 2; break;
+      default: wx = cssW - metrics.width - margin; wy = cssH - margin;
+    }
+    ctx.fillText(options.watermark, wx, wy);
+    ctx.restore();
+  }
 
   applyPostFX(ctx, cssW, cssH, options);
 }
@@ -643,5 +1159,30 @@ function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: Asc
       ctx.fillRect(shift,y,w,sh);
     }
     ctx.restore();
+  }
+  if (o.fx_crt) {
+    const strength = o.fx_crt_intensity / 100 * 0.4;
+    const src = ctx.getImageData(0, 0, Math.floor(w), Math.floor(h));
+    const dst = ctx.createImageData(src.width, src.height);
+    const sd = src.data, dd = dst.data;
+    const cx = src.width / 2, cy = src.height / 2;
+    const maxR = Math.sqrt(cx * cx + cy * cy);
+    for (let py = 0; py < src.height; py++) {
+      for (let px = 0; px < src.width; px++) {
+        const dx = (px - cx) / maxR, dy = (py - cy) / maxR;
+        const r2 = dx * dx + dy * dy;
+        const f = 1 + r2 * strength;
+        const sx = Math.round(cx + dx * f * maxR);
+        const sy = Math.round(cy + dy * f * maxR);
+        const di = (py * src.width + px) * 4;
+        if (sx >= 0 && sx < src.width && sy >= 0 && sy < src.height) {
+          const si = (sy * src.width + sx) * 4;
+          dd[di] = sd[si]; dd[di+1] = sd[si+1]; dd[di+2] = sd[si+2]; dd[di+3] = sd[si+3];
+        } else {
+          dd[di+3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(dst, 0, 0);
   }
 }

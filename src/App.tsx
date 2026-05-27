@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, useCallback } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { Header } from './components/Header';
 import { ControlPanel } from './components/ControlPanel';
@@ -9,10 +9,20 @@ import { MobileSheet } from './components/MobileSheet';
 import { Gallery } from './components/Gallery';
 import { DEFAULT_OPTIONS, type AsciiOptions, type AsciiFrame } from './lib/asciiConverter';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useHistory } from './hooks/useHistory';
 import { copyText } from './lib/exporters';
 
 export default function App() {
-  const [options, setOptions] = useState<AsciiOptions>(DEFAULT_OPTIONS);
+  const history = useHistory<AsciiOptions>(DEFAULT_OPTIONS);
+  const options = history.value;
+  const setOptions = useCallback((next: AsciiOptions | ((prev: AsciiOptions) => AsciiOptions)) => {
+    if (typeof next === 'function') {
+      history.set(next(history.value));
+    } else {
+      history.set(next);
+    }
+  }, [history]);
+
   const [frame, setFrame] = useState<AsciiFrame | null>(null);
   const [help, setHelp] = useState(false);
   const [gallery, setGallery] = useState(false);
@@ -34,7 +44,9 @@ export default function App() {
     i: () => setOptions(o => ({ ...o, invert: !o.invert })),
     m: () => setOptions(o => ({ ...o, color: !o.color })),
     '?': () => setHelp(v => !v),
-  }), [frame, help, mobileControls]);
+    'z': () => history.undo(),
+    'y': () => history.redo(),
+  }), [frame, help, mobileControls, history, setOptions]);
   useKeyboardShortcuts(shortcuts);
 
   return (

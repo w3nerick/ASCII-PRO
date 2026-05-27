@@ -30,7 +30,7 @@ export function MobileSheet({ open, onClose, title, children }: Props) {
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest('input, select, button, .slider')) return;
+    if (target.closest('input, select, button, .slider, [data-light-pad]')) return;
     setDragging(true);
     startY.current = e.touches[0].clientY;
     lastY.current = e.touches[0].clientY;

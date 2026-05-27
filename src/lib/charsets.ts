@@ -20,6 +20,9 @@ export type CharsetKey =
   | 'dots'
   | 'ascii_magic'   // matches ascii-magic.com default
   | 'dense'
+  | 'kanji'
+  | 'emoji'
+  | 'runic'
   | 'custom';
 
 export const CHARSETS: Record<Exclude<CharsetKey, 'custom'>, { label: string; ramp: string }> = {
@@ -41,6 +44,9 @@ export const CHARSETS: Record<Exclude<CharsetKey, 'custom'>, { label: string; ra
   dots:        { label: 'Dots',        ramp: '●•·⋅ ' },
   ascii_magic: { label: 'ASCII Magic', ramp: '@#S08Xx+=-;:,. ' },
   dense:       { label: 'Dense',       ramp: '█▓▒Ñ@#W$9876543210?!abc;:+=-,._ ' },
+  kanji:       { label: 'Kanji',       ramp: '龍鬱霧薔瀧錦藝驚麗響雲華風花月光水火空 ' },
+  emoji:       { label: 'Emoji',       ramp: '🔥💀👁️🌀✦◆●○·  ' },
+  runic:       { label: 'Runic',       ramp: 'ᛟᛞᛝᛜᛛᛚᛙᛘᛗᛖᛕᛔ᛬᛫ ' },
 };
 
 // Order shown in the UI (custom appended at the end).
@@ -63,6 +69,9 @@ export const CHARSET_KEYS: CharsetKey[] = [
   'glitch',
   'binary',
   'minimal',
+  'kanji',
+  'emoji',
+  'runic',
   'custom',
 ];
 

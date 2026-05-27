@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useRef, useCallback, type ReactNode } from 'react';
 import { ChevronRight, RotateCcw } from 'lucide-react';
 import { CHARSET_KEYS, charsetLabel, type CharsetKey } from '../lib/charsets';
-import type { AsciiOptions, RenderMode, ColorPalette, AspectRatio, BlendMode } from '../lib/asciiConverter';
+import type { AsciiOptions, RenderMode, ColorPalette, AspectRatio, BlendMode, AnimPreset, ShapeMask, PointLight } from '../lib/asciiConverter';
 
 interface Props {
   options: AsciiOptions;
@@ -82,6 +82,14 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
               { value: 'diamond', label: 'Diamonds' },
               { value: 'cross', label: 'Crosses' },
               { value: 'heart', label: 'Hearts' },
+              { value: 'hexagon', label: 'Hexagons' },
+              { value: 'wave', label: 'Wave' },
+              { value: 'outline', label: 'Outline' },
+              { value: 'pixel', label: 'Pixel' },
+              { value: 'lego', label: 'LEGO' },
+              { value: 'mosaic', label: 'Mosaic' },
+              { value: 'cube', label: 'Cube 3D' },
+              { value: 'mixed', label: 'Mixed' },
             ]}
           />
         </Row>
@@ -237,6 +245,110 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
         </Row>
       </Group>
 
+      {/* ANIMATION & EFFECTS */}
+      <Group label="Animation" defaultOpen={false}>
+        <Row label="Preset">
+          <Select
+            value={options.animPreset}
+            onChange={v => set('animPreset', v as AnimPreset)}
+            options={[
+              { value: 'none', label: 'None' },
+              { value: 'wave', label: 'Wave' },
+              { value: 'cascade', label: 'Cascade' },
+              { value: 'pulse', label: 'Pulse' },
+              { value: 'reveal', label: 'Reveal' },
+            ]}
+          />
+        </Row>
+        {options.animPreset !== 'none' && (
+          <Row label="Speed">
+            <SliderRow value={options.animPresetSpeed} min={1} max={10} step={1}
+              onChange={v => set('animPresetSpeed', v)} />
+          </Row>
+        )}
+        <Row label="Shape Mask">
+          <Select
+            value={options.shapeMask}
+            onChange={v => set('shapeMask', v as ShapeMask)}
+            options={[
+              { value: 'none', label: 'None' },
+              { value: 'circle', label: 'Circle' },
+              { value: 'heart', label: 'Heart' },
+              { value: 'star', label: 'Star' },
+              { value: 'diamond', label: 'Diamond' },
+              { value: 'hexagon', label: 'Hexagon' },
+            ]}
+          />
+        </Row>
+        <Row label="Disco Mode">
+          <Switch value={options.discoMode} onChange={v => set('discoMode', v)} />
+        </Row>
+        {options.discoMode && (
+          <Row label="Disco Speed">
+            <SliderRow value={options.discoSpeed} min={1} max={10} step={1}
+              onChange={v => set('discoSpeed', v)} />
+          </Row>
+        )}
+      </Group>
+
+      {/* POINT LIGHTS */}
+      <Group label="Point Lights" defaultOpen={false}>
+        <Row label="Enabled">
+          <Switch value={options.pointLightsEnabled} onChange={v => set('pointLightsEnabled', v)} />
+        </Row>
+        {options.pointLightsEnabled && (
+          <>
+            <LightPad
+              lights={options.pointLights}
+              onChange={lights => set('pointLights', lights)}
+            />
+            {options.pointLights.map((light, i) => (
+              <div key={i} style={{ borderTop: '0.5px solid var(--separator)' }}>
+                <Row label={`Light ${i + 1}`}>
+                  <div className="flex items-center gap-2">
+                    <label className="color-swatch" style={{ background: light.color }}>
+                      <input type="color" value={light.color} onChange={e => {
+                        const lights = [...options.pointLights];
+                        lights[i] = { ...lights[i], color: e.target.value };
+                        set('pointLights', lights);
+                      }} />
+                    </label>
+                    {options.pointLights.length > 1 && (
+                      <button type="button" className="btn btn-ghost btn-sm"
+                        onClick={() => set('pointLights', options.pointLights.filter((_, j) => j !== i))}>×</button>
+                    )}
+                  </div>
+                </Row>
+                <Row label="Radius">
+                  <SliderRow value={light.radius} min={0.1} max={1} step={0.05}
+                    onChange={v => {
+                      const lights = [...options.pointLights];
+                      lights[i] = { ...lights[i], radius: v };
+                      set('pointLights', lights);
+                    }} format={v => v.toFixed(2)} />
+                </Row>
+                <Row label="Intensity">
+                  <SliderRow value={light.intensity} min={0.1} max={2} step={0.1}
+                    onChange={v => {
+                      const lights = [...options.pointLights];
+                      lights[i] = { ...lights[i], intensity: v };
+                      set('pointLights', lights);
+                    }} format={v => v.toFixed(1)} />
+                </Row>
+              </div>
+            ))}
+            {options.pointLights.length < 4 && (
+              <Row label="">
+                <button type="button" className="btn btn-tinted btn-sm"
+                  onClick={() => set('pointLights', [...options.pointLights, { x: 0.5, y: 0.5, radius: 0.3, intensity: 1, color: '#ffffff' }])}>
+                  + Add Light
+                </button>
+              </Row>
+            )}
+          </>
+        )}
+      </Group>
+
       {/* OUTPUT / EXPORT */}
       <Group label="Output">
         <Row label="Aspect Ratio">
@@ -264,6 +376,37 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
             ]}
           />
         </Row>
+      </Group>
+
+      {/* WATERMARK */}
+      <Group label="Watermark" defaultOpen={false}>
+        <Row label="Text">
+          <input type="text" className="input" value={options.watermark}
+            onChange={e => set('watermark', e.target.value)}
+            placeholder="Your text..."
+            style={{ fontSize: 13, maxWidth: 120 }} />
+        </Row>
+        {options.watermark && (
+          <>
+            <Row label="Position">
+              <Select
+                value={options.watermarkPosition}
+                onChange={v => set('watermarkPosition', v as AsciiOptions['watermarkPosition'])}
+                options={[
+                  { value: 'top-left', label: 'Top Left' },
+                  { value: 'top-right', label: 'Top Right' },
+                  { value: 'bottom-left', label: 'Bot Left' },
+                  { value: 'bottom-right', label: 'Bot Right' },
+                  { value: 'center', label: 'Center' },
+                ]}
+              />
+            </Row>
+            <Row label="Opacity">
+              <SliderRow value={options.watermarkOpacity} min={10} max={100} step={1}
+                onChange={v => set('watermarkOpacity', v)} unit="%" />
+            </Row>
+          </>
+        )}
       </Group>
 
       {/* POST-PROCESSING */}
@@ -302,6 +445,12 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
           <Row label="Intensity">
             <SliderRow value={options.fx_glitch_intensity} min={0} max={100} step={1}
               onChange={v => set('fx_glitch_intensity', v)} unit="%" />
+          </Row>
+        </FxRow>
+        <FxRow label="CRT Curve" value={options.fx_crt} onChange={v => set('fx_crt', v)}>
+          <Row label="Intensity">
+            <SliderRow value={options.fx_crt_intensity} min={0} max={100} step={1}
+              onChange={v => set('fx_crt_intensity', v)} unit="%" />
           </Row>
         </FxRow>
       </Group>
@@ -386,6 +535,7 @@ function Select({ value, onChange, options }: {
     <select
       value={value}
       onChange={e => onChange(e.target.value)}
+      className="mobile-select"
       style={{
         background: 'var(--surface-2)',
         border: '0.5px solid var(--separator-strong)',
@@ -423,6 +573,135 @@ function FxRow({ label, value, onChange, children }: {
           {children}
         </div>
       )}
+    </div>
+  );
+}
+
+function LightPad({ lights, onChange }: { lights: PointLight[]; onChange: (lights: PointLight[]) => void }) {
+  const padRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef<number | null>(null);
+
+  const getPos = useCallback((e: React.PointerEvent | PointerEvent) => {
+    const rect = padRef.current!.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+    };
+  }, []);
+
+  const onPointerDown = useCallback((e: React.PointerEvent, idx: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging.current = idx;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (dragging.current === null) return;
+    const pos = getPos(e);
+    const next = [...lights];
+    next[dragging.current] = { ...next[dragging.current], x: pos.x, y: pos.y };
+    onChange(next);
+  }, [lights, onChange, getPos]);
+
+  const onPointerUp = useCallback(() => {
+    dragging.current = null;
+  }, []);
+
+  const onPadClick = useCallback((e: React.MouseEvent) => {
+    if (dragging.current !== null) return;
+    const rect = padRef.current!.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    if (lights.length < 4) {
+      onChange([...lights, { x, y, radius: 0.35, intensity: 1.2, color: '#ffffff' }]);
+    }
+  }, [lights, onChange]);
+
+  return (
+    <div style={{ padding: '8px 12px' }}>
+      <div
+        ref={padRef}
+        data-light-pad
+        onClick={onPadClick}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+        style={{
+          position: 'relative',
+          width: '100%',
+          aspectRatio: '16/10',
+          borderRadius: 10,
+          background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%)',
+          border: '1px solid var(--separator)',
+          overflow: 'hidden',
+          cursor: 'crosshair',
+          touchAction: 'none',
+        }}
+      >
+        {/* Grid lines */}
+        <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.15 }}>
+          <line x1="50%" y1="0" x2="50%" y2="100%" stroke="white" strokeWidth="0.5" />
+          <line x1="0" y1="50%" x2="100%" y2="50%" stroke="white" strokeWidth="0.5" />
+          <line x1="25%" y1="0" x2="25%" y2="100%" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" />
+          <line x1="75%" y1="0" x2="75%" y2="100%" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" />
+          <line x1="0" y1="25%" x2="100%" y2="25%" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" />
+          <line x1="0" y1="75%" x2="100%" y2="75%" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" />
+        </svg>
+
+        {/* Light radius visualizations */}
+        {lights.map((light, i) => (
+          <div key={`glow-${i}`} style={{
+            position: 'absolute',
+            left: `${light.x * 100}%`,
+            top: `${light.y * 100}%`,
+            width: `${light.radius * 200}%`,
+            height: `${light.radius * 200}%`,
+            transform: 'translate(-50%, -50%)',
+            borderRadius: '50%',
+            background: `radial-gradient(circle, ${light.color}${Math.round(light.intensity * 25).toString(16).padStart(2, '0')} 0%, transparent 70%)`,
+            pointerEvents: 'none',
+          }} />
+        ))}
+
+        {/* Light handles */}
+        {lights.map((light, i) => (
+          <div
+            key={i}
+            onPointerDown={e => onPointerDown(e, i)}
+            style={{
+              position: 'absolute',
+              left: `${light.x * 100}%`,
+              top: `${light.y * 100}%`,
+              width: 22,
+              height: 22,
+              marginLeft: -11,
+              marginTop: -11,
+              borderRadius: '50%',
+              background: light.color,
+              border: '2px solid white',
+              boxShadow: `0 0 8px ${light.color}, 0 0 16px ${light.color}80`,
+              cursor: 'grab',
+              zIndex: 10,
+              transition: dragging.current === i ? 'none' : 'box-shadow 0.2s',
+            }}
+          />
+        ))}
+
+        {/* Hint text */}
+        {lights.length === 0 && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            color: 'rgba(255,255,255,0.4)', fontSize: 11,
+          }}>
+            Click to add lights
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--label-tertiary)', marginTop: 4, textAlign: 'center' }}>
+        Drag to move · Click to add · Max 4
+      </div>
     </div>
   );
 }

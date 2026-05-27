@@ -860,6 +860,12 @@ kbd {
     width: 51px;
     height: 31px;
   }
+
+  .mobile-select {
+    height: 36px !important;
+    font-size: 14px !important;
+    max-width: 140px !important;
+  }
 }
 
 /* Mobile bottom bar — iOS tab bar inspired */
