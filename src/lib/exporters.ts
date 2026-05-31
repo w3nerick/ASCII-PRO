@@ -128,3 +128,163 @@ export function bestVideoMime(): { mime: string; ext: string } {
   }
   return { mime: 'video/webm', ext: 'webm' };
 }
+
+/* ─── SVG Export ─────────────────────────────────────────────────────── */
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+export type SvgRenderMode = 'text' | 'filled_circle' | 'filled_square' | 'triangle' | 'diamond' | 'cross' | 'heart' | 'pixel' | 'lego' | 'mosaic' | 'cube' | 'mixed' | 'hexagon' | 'wave' | 'outline';
+
+export interface SvgExportOptions {
+  background?: string;
+  foreground?: string;
+  fontSize?: number;
+  renderMode?: SvgRenderMode;
+  color?: boolean;
+}
+
+/**
+ * Generate an SVG string from an AsciiFrame.
+ * Supports colored (per-cell) and monochrome modes.
+ * For 'text' renderMode, each character is a <text> element.
+ * For shape modes, appropriate SVG primitives are used.
+ */
+export function frameToSvg(frame: AsciiFrame, opts: SvgExportOptions = {}): string {
+  const fontSize = opts.fontSize ?? 10;
+  const bg = opts.background ?? '#05010d';
+  const fg = opts.foreground ?? '#00fff5';
+  const renderMode = opts.renderMode ?? 'text';
+  const useColor = opts.color ?? !!frame.cells;
+
+  // Character cell dimensions (monospace proportions)
+  const cellW = fontSize * 0.6;
+  const cellH = fontSize * 1.2;
+  const width = frame.cols * cellW;
+  const height = frame.rows * cellH;
+
+  const lines: string[] = [];
+  lines.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`);
+  lines.push(`<rect width="100%" height="100%" fill="${escapeXml(bg)}"/>`);
+
+  if (renderMode === 'text') {
+    lines.push(`<g font-family="'Share Tech Mono', monospace" font-size="${fontSize}" dominant-baseline="text-before-edge">`);
+  }
+
+  // Get cells: use frame.cells if available, otherwise split text lines
+  const rows: { char: string; r: number; g: number; b: number }[][] = [];
+  if (frame.cells) {
+    for (const row of frame.cells) {
+      rows.push(row);
+    }
+  } else {
+    const textLines = frame.text.split('\n');
+    for (let y = 0; y < frame.rows; y++) {
+      const line = textLines[y] ?? '';
+      const row: { char: string; r: number; g: number; b: number }[] = [];
+      for (let x = 0; x < frame.cols; x++) {
+        row.push({ char: line[x] ?? ' ', r: 0, g: 255, b: 245 });
+      }
+      rows.push(row);
+    }
+  }
+
+  for (let y = 0; y < rows.length; y++) {
+    const row = rows[y];
+    for (let x = 0; x < row.length; x++) {
+      const cell = row[x];
+      if (cell.char === ' ') continue;
+
+      const cx = x * cellW;
+      const cy = y * cellH;
+      const color = useColor ? `rgb(${cell.r},${cell.g},${cell.b})` : fg;
+
+      if (renderMode === 'text') {
+        lines.push(`<text x="${cx}" y="${cy}" fill="${color}">${escapeXml(cell.char)}</text>`);
+      } else {
+        // Shape modes: center of cell
+        const mx = cx + cellW / 2;
+        const my = cy + cellH / 2;
+        const r = Math.min(cellW, cellH) * 0.45;
+
+        switch (renderMode) {
+          case 'filled_circle':
+            lines.push(`<circle cx="${mx}" cy="${my}" r="${r}" fill="${color}"/>`);
+            break;
+          case 'filled_square':
+          case 'pixel':
+          case 'lego':
+          case 'mosaic':
+          case 'cube':
+            lines.push(`<rect x="${cx}" y="${cy}" width="${cellW}" height="${cellH}" fill="${color}"/>`);
+            break;
+          case 'triangle':
+            lines.push(`<polygon points="${mx},${cy + cellH * 0.05} ${cx + cellW * 0.05},${cy + cellH * 0.95} ${cx + cellW * 0.95},${cy + cellH * 0.95}" fill="${color}"/>`);
+            break;
+          case 'diamond': {
+            const pts = `${mx},${cy} ${cx + cellW},${my} ${mx},${cy + cellH} ${cx},${my}`;
+            lines.push(`<polygon points="${pts}" fill="${color}"/>`);
+            break;
+          }
+          case 'cross': {
+            const t = r * 0.35;
+            lines.push(`<rect x="${mx - t}" y="${cy}" width="${t * 2}" height="${cellH}" fill="${color}"/>`);
+            lines.push(`<rect x="${cx}" y="${my - t}" width="${cellW}" height="${t * 2}" fill="${color}"/>`);
+            break;
+          }
+          case 'heart': {
+            const s = r * 0.9;
+            lines.push(`<path d="M${mx},${my + s * 0.6} C${mx - s * 1.5},${my - s * 0.5} ${mx - s * 0.5},${my - s * 1.2} ${mx},${my - s * 0.3} C${mx + s * 0.5},${my - s * 1.2} ${mx + s * 1.5},${my - s * 0.5} ${mx},${my + s * 0.6}Z" fill="${color}"/>`);
+            break;
+          }
+          case 'hexagon': {
+            const hr = r * 0.95;
+            const pts = Array.from({ length: 6 }, (_, i) => {
+              const a = (Math.PI / 3) * i - Math.PI / 6;
+              return `${mx + hr * Math.cos(a)},${my + hr * Math.sin(a)}`;
+            }).join(' ');
+            lines.push(`<polygon points="${pts}" fill="${color}"/>`);
+            break;
+          }
+          case 'wave':
+            lines.push(`<ellipse cx="${mx}" cy="${my}" rx="${cellW * 0.45}" ry="${cellH * 0.25}" fill="${color}"/>`);
+            break;
+          case 'outline':
+            lines.push(`<circle cx="${mx}" cy="${my}" r="${r}" fill="none" stroke="${color}" stroke-width="1"/>`);
+            break;
+          case 'mixed':
+          default:
+            // Mixed: alternate between circle and square
+            if ((x + y) % 2 === 0) {
+              lines.push(`<circle cx="${mx}" cy="${my}" r="${r}" fill="${color}"/>`);
+            } else {
+              lines.push(`<rect x="${cx}" y="${cy}" width="${cellW}" height="${cellH}" fill="${color}"/>`);
+            }
+            break;
+        }
+      }
+    }
+  }
+
+  if (renderMode === 'text') {
+    lines.push('</g>');
+  }
+
+  lines.push('</svg>');
+  return lines.join('\n');
+}
+
+export function downloadSvg(
+  frame: AsciiFrame,
+  opts: SvgExportOptions = {},
+  filename = 'ascii-pro.svg',
+) {
+  const svg = frameToSvg(frame, opts);
+  download(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), filename);
+}

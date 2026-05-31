@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, useCallback } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Header } from './components/Header';
 import { ControlPanel } from './components/ControlPanel';
 import { MediaStage, type MediaStageHandle } from './components/MediaStage';
@@ -27,7 +28,13 @@ export default function App() {
   const [help, setHelp] = useState(false);
   const [gallery, setGallery] = useState(false);
   const [mobileControls, setMobileControls] = useState(false);
+  const [notification, setNotification] = useState<string | null>(null);
   const stageRef = useRef<MediaStageHandle | null>(null);
+
+  const showNotification = useCallback((msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 2500);
+  }, []);
 
   const shortcuts = useMemo(() => ({
     ' ': () => stageRef.current?.togglePlay(),
@@ -40,16 +47,23 @@ export default function App() {
       else if (mobileControls) setMobileControls(false);
       else stageRef.current?.reset();
     },
-    c: () => { if (frame) void copyText(frame); },
+    c: () => {
+      if (frame) {
+        copyText(frame)
+          .then(() => showNotification('Copied to clipboard'))
+          .catch(() => showNotification('Clipboard access denied'));
+      }
+    },
     i: () => setOptions(o => ({ ...o, invert: !o.invert })),
     m: () => setOptions(o => ({ ...o, color: !o.color })),
     '?': () => setHelp(v => !v),
     'z': () => history.undo(),
     'y': () => history.redo(),
-  }), [frame, help, mobileControls, history, setOptions]);
+  }), [frame, help, mobileControls, history, setOptions, showNotification]);
   useKeyboardShortcuts(shortcuts);
 
   return (
+    <ErrorBoundary>
     <div className="flex flex-col" style={{ height: '100dvh', background: 'var(--bg)', overflow: 'hidden' }}>
       <Header onHelp={() => setHelp(true)} onGallery={() => setGallery(true)} />
 
@@ -102,6 +116,16 @@ export default function App() {
 
       <HelpModal open={help} onClose={() => setHelp(false)} />
       <Gallery open={gallery} onClose={() => setGallery(false)} />
+
+      {notification && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-sm z-[9999] pointer-events-none fade-in-up"
+          style={{ background: 'var(--bg-elevated)', color: 'var(--label-primary)', border: '1px solid var(--separator)' }}
+        >
+          {notification}
+        </div>
+      )}
     </div>
+    </ErrorBoundary>
   );
 }

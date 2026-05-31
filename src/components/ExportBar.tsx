@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Check, Copy, FileCode2, FileImage, FileText, Share2, Film } from 'lucide-react';
+import { Check, Copy, FileCode2, FileImage, FileText, Share2, Film, Image } from 'lucide-react';
 import type { AsciiFrame, AsciiOptions } from '../lib/asciiConverter';
 import {
   copyText,
   downloadHtml,
   downloadPng,
+  downloadSvg,
   downloadText,
   frameToHtml,
 } from '../lib/exporters';
@@ -17,6 +18,7 @@ interface Props {
 
 export function ExportBar({ frame, options, compact }: Props) {
   const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const disabled = !frame;
 
   const exportOpts = {
@@ -29,9 +31,13 @@ export function ExportBar({ frame, options, compact }: Props) {
 
   const handleCopy = async () => {
     if (!frame) return;
-    await copyText(frame);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
+    try {
+      await copyText(frame);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard access denied - silently ignore
+    }
   };
 
   const handlePreview = () => {
@@ -49,44 +55,49 @@ export function ExportBar({ frame, options, compact }: Props) {
   };
 
   const handleExportAnimation = async () => {
-    if (!frame?.cells) return;
-    const { GifEncoder } = await import('../lib/gifEncoder');
-    const { frameCanvasSize, renderFrameToCanvas } = await import('../lib/videoRecorder');
-    const { CHARSETS } = await import('../lib/charsets');
-    const ramp = options.charset === 'custom'
-      ? options.customRamp
-      : CHARSETS[options.charset as keyof typeof CHARSETS]?.ramp ?? '@%#*+=-:. ';
+    if (!frame?.cells || exporting) return;
+    setExporting(true);
+    try {
+      const { GifEncoder } = await import('../lib/gifEncoder');
+      const { frameCanvasSize, renderFrameToCanvas } = await import('../lib/videoRecorder');
+      const { CHARSETS } = await import('../lib/charsets');
+      const ramp = options.charset === 'custom'
+        ? options.customRamp
+        : CHARSETS[options.charset as keyof typeof CHARSETS]?.ramp ?? '@%#*+=-:. ';
 
-    const fontSize = options.fontSize * (options.exportScale || 1);
-    const size = frameCanvasSize(frame, fontSize);
-    const encoder = new GifEncoder(size.width, size.height, options.animSpeed || 5);
-    const canvas = document.createElement('canvas');
-    canvas.width = size.width; canvas.height = size.height;
-    const ctx = canvas.getContext('2d')!;
+      const fontSize = options.fontSize * (options.exportScale || 1);
+      const size = frameCanvasSize(frame, fontSize);
+      const encoder = new GifEncoder(size.width, size.height, options.animSpeed || 5);
+      const canvas = document.createElement('canvas');
+      canvas.width = size.width; canvas.height = size.height;
+      const ctx = canvas.getContext('2d')!;
 
-    const numFrames = Math.min(30, options.animSpeed * 3);
-    for (let i = 0; i < numFrames; i++) {
-      const mutated = frame.cells!.map(row =>
-        row.map(c => c.char === ' ' ? c : {
-          ...c,
-          char: Math.random() < 0.15 ? ramp[Math.floor(Math.random() * ramp.length)] : c.char,
-        })
-      );
-      renderFrameToCanvas(ctx, { ...frame, cells: mutated }, {
-        fontSize,
-        bgColor: options.bgColor,
-        fgColor: options.fgColor,
-        color: options.color,
-      });
-      encoder.addFrame(ctx);
+      const numFrames = Math.min(30, options.animSpeed * 3);
+      for (let i = 0; i < numFrames; i++) {
+        const mutated = frame.cells!.map(row =>
+          row.map(c => c.char === ' ' ? c : {
+            ...c,
+            char: Math.random() < 0.15 ? ramp[Math.floor(Math.random() * ramp.length)] : c.char,
+          })
+        );
+        renderFrameToCanvas(ctx, { ...frame, cells: mutated }, {
+          fontSize,
+          bgColor: options.bgColor,
+          fgColor: options.fgColor,
+          color: options.color,
+        });
+        encoder.addFrame(ctx);
+      }
+
+      const blob = await encoder.render();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'ascii-pro-animated.webm';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } finally {
+      setExporting(false);
     }
-
-    const blob = await encoder.render();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'ascii-pro-animated.webm';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   if (compact) {
@@ -198,16 +209,35 @@ export function ExportBar({ frame, options, compact }: Props) {
           <span className="relative z-[2]">Save Image</span>
         </button>
 
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          disabled={disabled}
+          onClick={() => frame && downloadSvg(frame, {
+            background: exportOpts.background,
+            foreground: exportOpts.foreground,
+            fontSize: exportOpts.fontSize,
+            color: exportOpts.color,
+            renderMode: options.renderMode,
+          })}
+          title="Download .svg (vector)"
+          aria-label="Download SVG"
+        >
+          <Image className="w-3.5 h-3.5" strokeWidth={1.75} />
+          <span>SVG</span>
+        </button>
+
         {options.animatedAscii && (
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            disabled={disabled}
+            disabled={disabled || exporting}
             onClick={() => frame && handleExportAnimation()}
             title="Export animated video"
+            aria-label="Export animation"
           >
             <Film className="w-3.5 h-3.5" strokeWidth={1.75} />
-            <span>Anim</span>
+            <span>{exporting ? 'Exporting...' : 'Anim'}</span>
           </button>
         )}
       </div>

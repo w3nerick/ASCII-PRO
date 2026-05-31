@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback, type ReactNode } from 'react';
-import { ChevronRight, RotateCcw } from 'lucide-react';
+import { ChevronRight, RotateCcw, Download, Upload, Trash2 } from 'lucide-react';
 import { CHARSET_KEYS, charsetLabel, type CharsetKey } from '../lib/charsets';
+import { PRESETS, applyPreset } from '../lib/presets';
+import { loadUserPresets, saveUserPreset, deleteUserPreset, exportPresetsJson, importPresetsJson } from '../lib/userPresets';
 import type { AsciiOptions, RenderMode, ColorPalette, AspectRatio, BlendMode, AnimPreset, ShapeMask, PointLight } from '../lib/asciiConverter';
 
 interface Props {
@@ -12,6 +14,46 @@ interface Props {
 export function ControlPanel({ options, onChange, onReset }: Props) {
   const set = <K extends keyof AsciiOptions>(key: K, val: AsciiOptions[K]) =>
     onChange({ ...options, [key]: val });
+
+  const [userPresets, setUserPresets] = useState(() => loadUserPresets());
+
+  const handleSavePreset = () => {
+    const name = window.prompt('Preset name:');
+    if (!name?.trim()) return;
+    saveUserPreset(name.trim(), options);
+    setUserPresets(loadUserPresets());
+  };
+
+  const handleDeletePreset = (id: string) => {
+    deleteUserPreset(id);
+    setUserPresets(loadUserPresets());
+  };
+
+  const handleExportPresets = () => {
+    const json = exportPresetsJson();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'ascii-pro-presets.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const handleImportPresets = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = '.json';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const count = importPresetsJson(reader.result as string);
+        if (count > 0) setUserPresets(loadUserPresets());
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -31,6 +73,57 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
           <span>Reset</span>
         </button>
       </div>
+
+      {/* PRESETS */}
+      <Group label="Presets">
+        <div style={{ padding: '8px 12px' }}>
+          <div className="flex flex-wrap gap-1.5">
+            {PRESETS.map(p => (
+              <button key={p.id} type="button" className="btn btn-ghost btn-sm"
+                title={p.hint}
+                onClick={() => onChange(applyPreset(p.id, options))}
+                style={{ fontSize: 11, height: 26, padding: '0 8px' }}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {userPresets.length > 0 && (
+            <div style={{ marginTop: 10, borderTop: '0.5px solid var(--separator)', paddingTop: 8 }}>
+              <span className="caption" style={{ marginBottom: 4, display: 'block' }}>Saved</span>
+              <div className="flex flex-col gap-1">
+                {userPresets.map(p => (
+                  <div key={p.id} className="flex items-center gap-1.5">
+                    <button type="button" className="btn btn-ghost btn-sm flex-1 justify-start"
+                      onClick={() => onChange({ ...options, ...p.options })}
+                      style={{ fontSize: 12, height: 26 }}>
+                      {p.name}
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm btn-icon"
+                      onClick={() => handleDeletePreset(p.id)}
+                      style={{ width: 26, height: 26 }}>
+                      <Trash2 className="w-3 h-3 text-label-tertiary" strokeWidth={1.75} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5" style={{ marginTop: 10 }}>
+            <button type="button" className="btn btn-tinted btn-sm flex-1" onClick={handleSavePreset}
+              style={{ fontSize: 12, height: 28 }}>
+              Save Current
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={handleExportPresets}
+              title="Export presets" style={{ width: 28, height: 28 }}>
+              <Download className="w-3 h-3" strokeWidth={1.75} />
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={handleImportPresets}
+              title="Import presets" style={{ width: 28, height: 28 }}>
+              <Upload className="w-3 h-3" strokeWidth={1.75} />
+            </button>
+          </div>
+        </div>
+      </Group>
 
       {/* MODE */}
       <Group label="Background">
@@ -470,6 +563,8 @@ function Group({ label, children, defaultOpen = true }: { label: string; childre
         type="button"
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-1 py-1.5"
+        aria-expanded={open}
+        aria-label={`${label} section`}
       >
         <span className="caption">{label}</span>
         <ChevronRight
@@ -481,6 +576,8 @@ function Group({ label, children, defaultOpen = true }: { label: string; childre
       {open && (
         <div
           className="mt-1.5 rounded-xl overflow-hidden"
+          role="region"
+          aria-label={label}
           style={{ background: 'var(--surface-1)', border: '0.5px solid var(--separator)' }}
         >
           {children}

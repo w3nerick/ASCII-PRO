@@ -75,6 +75,7 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
   const [showOriginal, setShowOriginal] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [sourceEl, setSourceEl] = useState<HTMLImageElement | HTMLVideoElement | null>(null);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
   const asciiCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -229,10 +230,12 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
     setError(null);
     const imageFiles = files.filter(f => fileKind(f) === 'image');
     if (imageFiles.length === 0) { setError('No images found in batch'); return; }
+    setProgress({ current: 0, total: imageFiles.length });
     try {
       const opts = optionsRef.current;
       const blobs: { name: string; blob: Blob }[] = [];
-      for (const file of imageFiles) {
+      for (let i = 0; i < imageFiles.length; i++) {
+        const file = imageFiles[i];
         const img = await loadImageFromFile(file);
         const f = imageToAscii(img, opts);
         const { frameToPngBlob } = await import('../lib/exporters');
@@ -245,6 +248,7 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
         });
         const baseName = file.name.replace(/\.[^.]+$/, '');
         blobs.push({ name: `${baseName}-ascii.png`, blob });
+        setProgress({ current: i + 1, total: imageFiles.length });
       }
       if (blobs.length === 1) {
         const { downloadVideoBlob } = await import('../lib/exporters');
@@ -260,6 +264,8 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
       setError(null);
     } catch (e) {
       setError((e as Error).message ?? 'Batch export failed');
+    } finally {
+      setProgress(null);
     }
   };
 
@@ -345,6 +351,20 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
         <div className="material-thin px-4 py-3 flex items-start gap-2 text-sys-red callout fade-in">
           <span className="font-medium">Error:</span>
           <span>{error}</span>
+        </div>
+      )}
+
+      {progress && (
+        <div className="material-thin px-4 py-3 flex items-center gap-3 callout fade-in">
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="footnote text-label-secondary">Processing batch...</span>
+              <span className="footnote text-label-tertiary tabular-nums font-mono">{progress.current}/{progress.total}</span>
+            </div>
+            <div style={{ height: 3, background: 'var(--surface-2)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${(progress.current / progress.total) * 100}%`, background: 'var(--accent)', borderRadius: 2, transition: 'width 200ms var(--ease)' }} />
+            </div>
+          </div>
         </div>
       )}
 
