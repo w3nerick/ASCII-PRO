@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Copy, FileCode2, FileImage, FileText, Share2, Film, Image } from 'lucide-react';
+import { Check, Copy, FileCode2, FileImage, FileText, Share2, Film, Image, Link, Gift } from 'lucide-react';
 import type { AsciiFrame, AsciiOptions } from '../lib/asciiConverter';
 import {
   copyText,
@@ -9,6 +9,7 @@ import {
   downloadText,
   frameToHtml,
 } from '../lib/exporters';
+import { generateShareUrl } from '../lib/shareCodes';
 
 interface Props {
   frame: AsciiFrame | null;
@@ -18,7 +19,9 @@ interface Props {
 
 export function ExportBar({ frame, options, compact }: Props) {
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [gifExporting, setGifExporting] = useState(false);
   const disabled = !frame;
 
   const exportOpts = {
@@ -40,6 +43,19 @@ export function ExportBar({ frame, options, compact }: Props) {
     }
   };
 
+  const handleShareLink = async () => {
+    try {
+      const url = generateShareUrl(options);
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // fallback: just update URL
+      const url = generateShareUrl(options);
+      window.history.replaceState(null, '', new URL(url).hash ? `#${new URL(url).hash.slice(1)}` : '');
+    }
+  };
+
   const handlePreview = () => {
     if (!frame) return;
     const w = window.open('', '_blank');
@@ -52,6 +68,56 @@ export function ExportBar({ frame, options, compact }: Props) {
       }),
     );
     w.document.close();
+  };
+
+  const handleExportGif = async () => {
+    if (!frame?.cells || gifExporting) return;
+    setGifExporting(true);
+    try {
+      const { GifEncoder } = await import('../lib/gifEncoder');
+      const { generateLoopFrames } = await import('../lib/loopAnimation');
+      const { frameCanvasSize, renderFrameToCanvas } = await import('../lib/videoRecorder');
+      const { CHARSETS } = await import('../lib/charsets');
+      const ramp = options.charset === 'custom'
+        ? options.customRamp
+        : CHARSETS[options.charset as keyof typeof CHARSETS]?.ramp ?? '@%#*+=-:. ';
+
+      const fontSize = options.fontSize * (options.exportScale || 1);
+      const size = frameCanvasSize(frame, fontSize);
+
+      // Generate perfect loop frames
+      const loopFrames = generateLoopFrames(frame, {
+        frameCount: 24,
+        ramp,
+        mutationRate: 0.1,
+        brightnessWave: 0.2,
+        noiseScale: 0.25,
+      });
+
+      const encoder = new GifEncoder(size.width, size.height, 12, { loop: true, dither: true });
+      const canvas = document.createElement('canvas');
+      canvas.width = size.width; canvas.height = size.height;
+      const ctx = canvas.getContext('2d')!;
+
+      for (const loopFrame of loopFrames) {
+        renderFrameToCanvas(ctx, loopFrame, {
+          fontSize,
+          bgColor: options.bgColor,
+          fgColor: options.fgColor,
+          color: options.color,
+        });
+        encoder.addFrame(ctx);
+      }
+
+      const blob = await encoder.render();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'ascii-pro-loop.gif';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } finally {
+      setGifExporting(false);
+    }
   };
 
   const handleExportAnimation = async () => {
@@ -117,16 +183,17 @@ export function ExportBar({ frame, options, compact }: Props) {
           disabled={disabled}
         />
         <MobileAction
-          icon={<FileText className="w-[18px] h-[18px]" strokeWidth={1.75} />}
-          label="Text"
-          onClick={() => frame && downloadText(frame)}
-          disabled={disabled}
+          icon={<Gift className="w-[18px] h-[18px]" strokeWidth={1.75} />}
+          label="GIF"
+          onClick={handleExportGif}
+          disabled={disabled || gifExporting}
         />
         <MobileAction
-          icon={<Share2 className="w-[18px] h-[18px]" strokeWidth={1.75} />}
-          label="Share"
-          onClick={handlePreview}
+          icon={linkCopied ? <Check className="w-[18px] h-[18px] text-sys-green" strokeWidth={2} /> : <Link className="w-[18px] h-[18px]" strokeWidth={1.75} />}
+          label={linkCopied ? 'Copied!' : 'Share'}
+          onClick={handleShareLink}
           disabled={disabled}
+          active={linkCopied}
         />
       </div>
     );
@@ -227,6 +294,18 @@ export function ExportBar({ frame, options, compact }: Props) {
           <span>SVG</span>
         </button>
 
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          disabled={disabled || gifExporting}
+          onClick={handleExportGif}
+          title="Export as looping GIF"
+          aria-label="Export GIF"
+        >
+          <Gift className="w-3.5 h-3.5" strokeWidth={1.75} />
+          <span>{gifExporting ? 'Encoding...' : 'GIF'}</span>
+        </button>
+
         {options.animatedAscii && (
           <button
             type="button"
@@ -240,6 +319,29 @@ export function ExportBar({ frame, options, compact }: Props) {
             <span>{exporting ? 'Exporting...' : 'Anim'}</span>
           </button>
         )}
+
+        <div className="w-px h-4 bg-separator mx-1" />
+
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          disabled={disabled}
+          onClick={handleShareLink}
+          title="Copy shareable link with current settings"
+          aria-label="Copy share link"
+        >
+          {linkCopied ? (
+            <>
+              <Check className="w-3.5 h-3.5 text-sys-green" strokeWidth={2.5} />
+              <span>Link copied!</span>
+            </>
+          ) : (
+            <>
+              <Link className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <span>Share Link</span>
+            </>
+          )}
+        </button>
       </div>
     </div>
   );

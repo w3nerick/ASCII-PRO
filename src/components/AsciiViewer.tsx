@@ -702,6 +702,29 @@ function renderToCanvas(
             ctx.fillText(rndChar, x * cellW, y * cellH);
           }
         }
+      } else if (renderMode === 'halftone') {
+        const maxR = Math.min(cellW, cellH) * 0.48;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            const lum = (c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722) / 255;
+            const radius = maxR * (1 - lum * 0.75);
+            if (radius > 0.5) {
+              ctx.beginPath();
+              ctx.arc(x * cellW + cellW / 2, y * cellH + cellH / 2, radius, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        }
       } else {
         const fs = Math.max(2, Math.min(cellW / 0.65, cellH * 0.95));
         ctx.font = `${fs}px "Courier New", Courier, monospace`;
@@ -1049,6 +1072,30 @@ function renderToCanvas(
             ctx.fillText(rndChar, pad + x * charW, pad + y * lineH);
           }
         }
+      } else if (renderMode === 'halftone') {
+        const maxR = Math.min(charW, lineH) * 0.48;
+        for (let y = 0; y < frame.cells.length; y++) {
+          const row = frame.cells[y];
+          for (let x = 0; x < row.length; x++) {
+            const c = row[x];
+            if (c.char === ' ') continue;
+            const ci = y * frame.cols + x;
+            if (cellAlphas && cellAlphas[ci] <= 0) continue;
+            const lf = cellLights ? cellLights[ci] : 1;
+            const ca = cellAlphas ? cellAlphas[ci] : 1;
+            if (ca < 1) ctx.globalAlpha = baseAlpha * ca; else if (ctx.globalAlpha !== baseAlpha) ctx.globalAlpha = baseAlpha;
+            const col = processColor(c.r, c.g, c.b, lf);
+            if (col !== cur) { ctx.fillStyle = col; if (glowRadius > 0) ctx.shadowColor = col; cur = col; }
+            // Halftone: radius inversely proportional to luminance
+            const lum = (c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722) / 255;
+            const radius = maxR * (1 - lum * 0.75);
+            if (radius > 0.5) {
+              ctx.beginPath();
+              ctx.arc(pad + x * charW + charW / 2, pad + y * lineH + lineH / 2, radius, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        }
       } else {
         ctx.font = `${options.fontSize}px "Share Tech Mono", "SF Mono", ui-monospace, monospace`;
         ctx.textBaseline = 'top'; ctx.textAlign = 'left';
@@ -1184,5 +1231,61 @@ function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: Asc
       }
     }
     ctx.putImageData(dst, 0, 0);
+  }
+  if (o.fx_reeded) {
+    // Reeded Glass: vertical refraction strips that shift pixels horizontally
+    const intensity = o.fx_reeded_intensity / 100;
+    const slices = Math.max(5, Math.min(80, o.fx_reeded_slices));
+    const sliceW = w / slices;
+    const src = ctx.getImageData(0, 0, Math.floor(w), Math.floor(h));
+    const dst = ctx.createImageData(src.width, src.height);
+    const sd = src.data, dd = dst.data;
+    for (let py = 0; py < src.height; py++) {
+      for (let px = 0; px < src.width; px++) {
+        // Each slice acts as a cylindrical lens
+        const slicePos = (px % sliceW) / sliceW; // 0..1 within slice
+        const refract = Math.sin(slicePos * Math.PI) * intensity * sliceW * 0.3;
+        const sx = Math.round(px + refract);
+        const di = (py * src.width + px) * 4;
+        if (sx >= 0 && sx < src.width) {
+          const si = (py * src.width + sx) * 4;
+          dd[di] = sd[si]; dd[di+1] = sd[si+1]; dd[di+2] = sd[si+2]; dd[di+3] = sd[si+3];
+        } else {
+          dd[di] = sd[di]; dd[di+1] = sd[di+1]; dd[di+2] = sd[di+2]; dd[di+3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(dst, 0, 0);
+  }
+  if (o.fx_lightrays) {
+    // Light Rays: angular beams radiating from a point source
+    const intensity = o.fx_lightrays_intensity / 100;
+    const cx = o.fx_lightrays_x * w;
+    const cy = o.fx_lightrays_y * h;
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    const numRays = 12 + Math.floor(intensity * 20);
+    for (let i = 0; i < numRays; i++) {
+      const angle = (i / numRays) * Math.PI * 2;
+      const length = Math.max(w, h) * (0.8 + Math.random() * 0.4);
+      const spread = (0.02 + Math.random() * 0.04) * Math.PI;
+      const ex1 = cx + Math.cos(angle - spread) * length;
+      const ey1 = cy + Math.sin(angle - spread) * length;
+      const ex2 = cx + Math.cos(angle + spread) * length;
+      const ey2 = cy + Math.sin(angle + spread) * length;
+      const grad = ctx.createLinearGradient(cx, cy, cx + Math.cos(angle) * length, cy + Math.sin(angle) * length);
+      grad.addColorStop(0, `rgba(255,255,255,${(intensity * 0.3).toFixed(3)})`);
+      grad.addColorStop(0.5, `rgba(255,255,200,${(intensity * 0.1).toFixed(3)})`);
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(ex1, ey1);
+      ctx.lineTo(ex2, ey2);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.globalAlpha = intensity * 0.5;
+      ctx.fill();
+    }
+    ctx.restore();
   }
 }

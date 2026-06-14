@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useCallback } from 'react';
+import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Header } from './components/Header';
@@ -12,9 +12,20 @@ import { DEFAULT_OPTIONS, type AsciiOptions, type AsciiFrame } from './lib/ascii
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useHistory } from './hooks/useHistory';
 import { copyText } from './lib/exporters';
+import { loadFromUrl, clearShareFromUrl } from './lib/shareCodes';
 
 export default function App() {
-  const history = useHistory<AsciiOptions>(DEFAULT_OPTIONS);
+  // Load initial options from URL share code if present
+  const initialOptions = useMemo(() => {
+    const shared = loadFromUrl();
+    if (shared) {
+      clearShareFromUrl();
+      return shared;
+    }
+    return DEFAULT_OPTIONS;
+  }, []);
+
+  const history = useHistory<AsciiOptions>(initialOptions);
   const options = history.value;
   const setOptions = useCallback((next: AsciiOptions | ((prev: AsciiOptions) => AsciiOptions)) => {
     if (typeof next === 'function') {
@@ -35,6 +46,20 @@ export default function App() {
     setNotification(msg);
     setTimeout(() => setNotification(null), 2500);
   }, []);
+
+  // Handle share code from URL changes (e.g., browser back/forward)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const shared = loadFromUrl();
+      if (shared) {
+        clearShareFromUrl();
+        setOptions(shared);
+        showNotification('Loaded shared style');
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [setOptions, showNotification]);
 
   const shortcuts = useMemo(() => ({
     ' ': () => stageRef.current?.togglePlay(),

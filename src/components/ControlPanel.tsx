@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, type ReactNode } from 'react';
-import { ChevronRight, RotateCcw, Download, Upload, Trash2 } from 'lucide-react';
+import { ChevronRight, RotateCcw, Download, Upload, Trash2, Shuffle } from 'lucide-react';
 import { CHARSET_KEYS, charsetLabel, type CharsetKey } from '../lib/charsets';
 import { PRESETS, applyPreset } from '../lib/presets';
 import { loadUserPresets, saveUserPreset, deleteUserPreset, exportPresetsJson, importPresetsJson } from '../lib/userPresets';
+import { randomizeGenome } from '../lib/genomeRandomizer';
 import type { AsciiOptions, RenderMode, ColorPalette, AspectRatio, BlendMode, AnimPreset, ShapeMask, PointLight } from '../lib/asciiConverter';
 
 interface Props {
@@ -113,6 +114,10 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
               style={{ fontSize: 12, height: 28 }}>
               Save Current
             </button>
+            <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={() => onChange(randomizeGenome(options))}
+              title="Surprise me — random style" style={{ width: 28, height: 28 }}>
+              <Shuffle className="w-3 h-3" strokeWidth={1.75} />
+            </button>
             <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={handleExportPresets}
               title="Export presets" style={{ width: 28, height: 28 }}>
               <Download className="w-3 h-3" strokeWidth={1.75} />
@@ -183,6 +188,7 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
               { value: 'mosaic', label: 'Mosaic' },
               { value: 'cube', label: 'Cube 3D' },
               { value: 'mixed', label: 'Mixed' },
+              { value: 'halftone', label: 'Halftone' },
             ]}
           />
         </Row>
@@ -544,6 +550,30 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
           <Row label="Intensity">
             <SliderRow value={options.fx_crt_intensity} min={0} max={100} step={1}
               onChange={v => set('fx_crt_intensity', v)} unit="%" />
+          </Row>
+        </FxRow>
+        <FxRow label="Reeded Glass" value={options.fx_reeded} onChange={v => set('fx_reeded', v)}>
+          <Row label="Intensity">
+            <SliderRow value={options.fx_reeded_intensity} min={0} max={100} step={1}
+              onChange={v => set('fx_reeded_intensity', v)} unit="%" />
+          </Row>
+          <Row label="Slices">
+            <SliderRow value={options.fx_reeded_slices} min={5} max={80} step={1}
+              onChange={v => set('fx_reeded_slices', v)} />
+          </Row>
+        </FxRow>
+        <FxRow label="Light Rays" value={options.fx_lightrays} onChange={v => set('fx_lightrays', v)}>
+          <Row label="Intensity">
+            <SliderRow value={options.fx_lightrays_intensity} min={0} max={100} step={1}
+              onChange={v => set('fx_lightrays_intensity', v)} unit="%" />
+          </Row>
+          <Row label="Source X">
+            <SliderRow value={options.fx_lightrays_x} min={0} max={1} step={0.05}
+              onChange={v => set('fx_lightrays_x', v)} format={v => v.toFixed(2)} />
+          </Row>
+          <Row label="Source Y">
+            <SliderRow value={options.fx_lightrays_y} min={0} max={1} step={0.05}
+              onChange={v => set('fx_lightrays_y', v)} format={v => v.toFixed(2)} />
           </Row>
         </FxRow>
       </Group>

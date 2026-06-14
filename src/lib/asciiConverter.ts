@@ -1,6 +1,6 @@
 import { CHARSETS, type CharsetKey } from './charsets';
 
-export type RenderMode = 'text' | 'filled_circle' | 'filled_square' | 'triangle' | 'diamond' | 'cross' | 'heart' | 'pixel' | 'lego' | 'mosaic' | 'cube' | 'mixed' | 'hexagon' | 'wave' | 'outline';
+export type RenderMode = 'text' | 'filled_circle' | 'filled_square' | 'triangle' | 'diamond' | 'cross' | 'heart' | 'pixel' | 'lego' | 'mosaic' | 'cube' | 'mixed' | 'hexagon' | 'wave' | 'outline' | 'halftone';
 export type ColorPalette = 'original' | 'warm' | 'cool' | 'cyberpunk' | 'neon' | 'sunset';
 export type AspectRatio = 'free' | '1:1' | '4:5' | '9:16' | '16:9' | '3:1';
 export type BlendMode = 'normal' | 'screen' | 'multiply' | 'overlay';
@@ -73,6 +73,15 @@ export interface AsciiOptions {
   fx_grain_intensity: number;       // 0..100
   fx_crt: boolean;
   fx_crt_intensity: number;         // 0..100
+  // Reeded Glass (vertical refraction strips)
+  fx_reeded: boolean;
+  fx_reeded_intensity: number;      // 0..100
+  fx_reeded_slices: number;         // 5..80 — number of vertical slices
+  // Light Rays (angular beams from point source)
+  fx_lightrays: boolean;
+  fx_lightrays_intensity: number;   // 0..100
+  fx_lightrays_x: number;           // 0..1 normalized X position
+  fx_lightrays_y: number;           // 0..1 normalized Y position
   // Point lights
   pointLights: PointLight[];
   pointLightsEnabled: boolean;
@@ -156,6 +165,13 @@ export const DEFAULT_OPTIONS: AsciiOptions = {
   fx_grain_intensity: 25,
   fx_crt: false,
   fx_crt_intensity: 40,
+  fx_reeded: false,
+  fx_reeded_intensity: 50,
+  fx_reeded_slices: 20,
+  fx_lightrays: false,
+  fx_lightrays_intensity: 40,
+  fx_lightrays_x: 0.5,
+  fx_lightrays_y: 0.3,
   pointLights: [
     { x: 0.3, y: 0.3, radius: 0.4, intensity: 1.2, color: '#00aaff' },
     { x: 0.7, y: 0.7, radius: 0.35, intensity: 1.0, color: '#ff44aa' },

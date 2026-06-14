@@ -140,7 +140,7 @@ function escapeXml(s: string): string {
     .replace(/'/g, '&apos;');
 }
 
-export type SvgRenderMode = 'text' | 'filled_circle' | 'filled_square' | 'triangle' | 'diamond' | 'cross' | 'heart' | 'pixel' | 'lego' | 'mosaic' | 'cube' | 'mixed' | 'hexagon' | 'wave' | 'outline';
+export type SvgRenderMode = 'text' | 'filled_circle' | 'filled_square' | 'triangle' | 'diamond' | 'cross' | 'heart' | 'pixel' | 'lego' | 'mosaic' | 'cube' | 'mixed' | 'hexagon' | 'wave' | 'outline' | 'halftone';
 
 export interface SvgExportOptions {
   background?: string;
@@ -255,6 +255,13 @@ export function frameToSvg(frame: AsciiFrame, opts: SvgExportOptions = {}): stri
           case 'wave':
             lines.push(`<ellipse cx="${mx}" cy="${my}" rx="${cellW * 0.45}" ry="${cellH * 0.25}" fill="${color}"/>`);
             break;
+          case 'halftone': {
+            // Variable radius based on luminance (darker = larger dot)
+            const lum = (cell.r * 0.2126 + cell.g * 0.7152 + cell.b * 0.0722) / 255;
+            const hr = r * (1 - lum * 0.7);
+            lines.push(`<circle cx="${mx}" cy="${my}" r="${hr.toFixed(2)}" fill="${color}"/>`);
+            break;
+          }
           case 'outline':
             lines.push(`<circle cx="${mx}" cy="${my}" r="${r}" fill="none" stroke="${color}" stroke-width="1"/>`);
             break;
