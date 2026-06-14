@@ -291,6 +291,23 @@ export const DEMO_GALLERY: DemoEntry[] = [
   },
 ];
 
+/* ─── Lumen Shader Demos ──────────────────────────────────────── */
+
+const LUMEN_DEMOS: DemoEntry[] = [
+  { id: 'lumen_chrome', label: 'CHROME', generate: () => import('./lumenRenderer').then(m => m.renderLumenMode(0)) },
+  { id: 'lumen_silk', label: 'SILK', generate: () => import('./lumenRenderer').then(m => m.renderLumenMode(1)) },
+  { id: 'lumen_bloom', label: 'BLOOM', generate: () => import('./lumenRenderer').then(m => m.renderLumenMode(2)) },
+  { id: 'lumen_aura', label: 'AURA', generate: () => import('./lumenRenderer').then(m => m.renderLumenMode(3)) },
+  { id: 'lumen_rays', label: 'RAYS', generate: () => import('./lumenRenderer').then(m => m.renderLumenMode(4)) },
+  { id: 'lumen_halftone', label: 'DOTS', generate: () => import('./lumenRenderer').then(m => m.renderLumenMode(5)) },
+  { id: 'lumen_glyphs', label: 'GLYPHS', generate: () => import('./lumenRenderer').then(m => m.renderLumenMode(6)) },
+  { id: 'lumen_reeded', label: 'REEDED', generate: () => import('./lumenRenderer').then(m => m.renderLumenMode(7)) },
+  { id: 'lumen_mosaic', label: 'MOSAIC', generate: () => import('./lumenRenderer').then(m => m.renderLumenMode(8)) },
+];
+
+// Merge lumen demos into gallery
+DEMO_GALLERY.push(...LUMEN_DEMOS);
+
 /** Legacy single demo for backwards compat. */
 export function generateDemoImage(): Promise<HTMLImageElement> {
   return DEMO_GALLERY[0].generate();
