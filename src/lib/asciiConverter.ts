@@ -7,6 +7,16 @@ export type BlendMode = 'normal' | 'screen' | 'multiply' | 'overlay';
 export type AnimPreset = 'none' | 'wave' | 'cascade' | 'pulse' | 'reveal';
 export type ShapeMask = 'none' | 'circle' | 'heart' | 'star' | 'diamond' | 'hexagon';
 
+/**
+ * Zone mask: a flat Uint8Array grid where 255 = ASCII zone, 0 = original image.
+ * Dimensions match the source image (not the ASCII grid).
+ */
+export interface ZoneMaskData {
+  data: Uint8Array;
+  width: number;
+  height: number;
+}
+
 export interface PointLight {
   x: number;  // 0..1 normalized
   y: number;  // 0..1 normalized
@@ -97,6 +107,10 @@ export interface AsciiOptions {
   watermark: string;
   watermarkPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
   watermarkOpacity: number;         // 0..100
+  // Zone masking (selective ASCII regions)
+  zoneMaskEnabled: boolean;
+  zoneBrushSize: number;            // 5..100 px
+  zoneFeather: number;              // 0..20 px edge softness
 }
 
 export interface AsciiCell {
@@ -185,6 +199,9 @@ export const DEFAULT_OPTIONS: AsciiOptions = {
   watermark: '',
   watermarkPosition: 'bottom-right',
   watermarkOpacity: 40,
+  zoneMaskEnabled: false,
+  zoneBrushSize: 30,
+  zoneFeather: 4,
 };
 
 /**

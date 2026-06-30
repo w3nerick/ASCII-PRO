@@ -8,7 +8,8 @@ import { ExportBar } from './components/ExportBar';
 import { HelpModal } from './components/HelpModal';
 import { MobileSheet } from './components/MobileSheet';
 import { Gallery } from './components/Gallery';
-import { DEFAULT_OPTIONS, type AsciiOptions, type AsciiFrame } from './lib/asciiConverter';
+import { DEFAULT_OPTIONS, type AsciiOptions, type AsciiFrame, type ZoneMaskData } from './lib/asciiConverter';
+import type { ZoneShape } from './components/ZonePainter';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useHistory } from './hooks/useHistory';
 import { copyText } from './lib/exporters';
@@ -40,6 +41,8 @@ export default function App() {
   const [gallery, setGallery] = useState(false);
   const [mobileControls, setMobileControls] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const [zoneMask, setZoneMask] = useState<ZoneMaskData | null>(null);
+  const [zoneShapes, setZoneShapes] = useState<ZoneShape[]>([]);
   const stageRef = useRef<MediaStageHandle | null>(null);
 
   const showNotification = useCallback((msg: string) => {
@@ -95,7 +98,7 @@ export default function App() {
       {/* Desktop layout */}
       <div className="hidden md:flex flex-1 min-h-0">
         <div className="flex flex-col flex-1 min-w-0 p-4 gap-3 fade-in-up">
-          <MediaStage ref={stageRef} options={options} onFrame={setFrame} />
+          <MediaStage ref={stageRef} options={options} onFrame={setFrame} zoneMask={zoneMask} onZoneMaskChange={setZoneMask} zoneShapes={zoneShapes} onZoneShapesChange={setZoneShapes} />
           <ExportBar frame={frame} options={options} />
         </div>
         <div
@@ -113,7 +116,7 @@ export default function App() {
       {/* Mobile layout */}
       <div className="flex md:hidden flex-col flex-1 min-h-0 overflow-hidden">
         <div className="flex flex-col flex-1 min-h-0 px-2 pt-2">
-          <MediaStage ref={stageRef} options={options} onFrame={setFrame} />
+          <MediaStage ref={stageRef} options={options} onFrame={setFrame} zoneMask={zoneMask} onZoneMaskChange={setZoneMask} zoneShapes={zoneShapes} onZoneShapesChange={setZoneShapes} />
         </div>
 
         {/* iOS-style bottom bar */}

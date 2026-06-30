@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { AsciiFrame, AsciiOptions, ColorPalette, PointLight, AnimPreset, ShapeMask } from '../lib/asciiConverter';
+import type { AsciiFrame, AsciiOptions, ColorPalette, PointLight, AnimPreset, ShapeMask, ZoneMaskData } from '../lib/asciiConverter';
 import { CHARSETS } from '../lib/charsets';
 
 interface Props {
@@ -7,14 +7,17 @@ interface Props {
   options: AsciiOptions;
   sourceEl?: HTMLImageElement | HTMLVideoElement | null;
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
+  zoneMask?: ZoneMaskData | null;
 }
 
-export function AsciiViewer({ frame, options, sourceEl, onCanvasReady }: Props) {
+export function AsciiViewer({ frame, options, sourceEl, onCanvasReady, zoneMask }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const sourceRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
   const animRef = useRef<number | null>(null);
   const animFrameRef = useRef<AsciiFrame | null>(null);
   const animOptionsRef = useRef<AsciiOptions>(options);
+  const zoneMaskRef = useRef<ZoneMaskData | null>(null);
+  zoneMaskRef.current = zoneMask ?? null;
 
   if (sourceEl) sourceRef.current = sourceEl;
   animFrameRef.current = frame;
@@ -46,7 +49,7 @@ export function AsciiViewer({ frame, options, sourceEl, onCanvasReady }: Props) 
           char: Math.random() < 0.15 ? ramp[Math.floor(Math.random() * ramp.length)] : c.char
         })
       );
-      renderToCanvas(canvas, { ...f, cells: mutated }, o, sourceRef.current);
+      renderToCanvas(canvas, { ...f, cells: mutated }, o, sourceRef.current, zoneMaskRef.current);
     };
     animRef.current = requestAnimationFrame(tick);
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
@@ -60,8 +63,8 @@ export function AsciiViewer({ frame, options, sourceEl, onCanvasReady }: Props) 
     if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
     const canvas = canvasRef.current;
     if (!canvas) return;
-    renderToCanvas(canvas, frame, options, sourceRef.current);
-  }, [frame, options, sourceEl, needsContinuousRender]);
+    renderToCanvas(canvas, frame, options, sourceRef.current, zoneMaskRef.current);
+  }, [frame, options, sourceEl, needsContinuousRender, zoneMask]);
 
   useEffect(() => {
     if (options.animatedAscii) return;
@@ -74,18 +77,20 @@ export function AsciiViewer({ frame, options, sourceEl, onCanvasReady }: Props) 
       const f = animFrameRef.current;
       const o = animOptionsRef.current;
       if (!f || !canvas) return;
-      renderToCanvas(canvas, f, o, sourceRef.current);
+      renderToCanvas(canvas, f, o, sourceRef.current, zoneMaskRef.current);
     };
     animRef.current = requestAnimationFrame(tick);
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
-  }, [needsContinuousRender, frame, options.animatedAscii]);
+  }, [needsContinuousRender, frame, options.animatedAscii, zoneMask]);
 
   const bgStyle = options.bgMode === 'transparent' ? 'transparent'
     : (options.bgMode === 'original' || options.bgMode === 'blurred') ? '#000' : options.bgColor;
 
+  const showChecker = options.zoneMaskEnabled || options.bgMode === 'transparent';
+
   return (
-    <div className="h-full w-full overflow-hidden flex items-center justify-center"
-      style={{ background: bgStyle }}>
+    <div className={`h-full w-full overflow-hidden flex items-center justify-center${showChecker ? ' checkered-bg' : ''}`}
+      style={showChecker ? undefined : { background: bgStyle }}>
       <canvas ref={(el) => {
         canvasRef.current = el;
         if (el && onCanvasReady) onCanvasReady(el);
@@ -242,8 +247,10 @@ function renderToCanvas(
   frame: AsciiFrame | null,
   options: AsciiOptions,
   src: HTMLImageElement | HTMLVideoElement | null,
+  zoneMask?: ZoneMaskData | null,
 ) {
-  const ctx = canvas.getContext('2d', { alpha: options.bgMode === 'transparent' });
+  const hasZoneMask = options.zoneMaskEnabled && zoneMask && zoneMask.data.length > 0;
+  const ctx = canvas.getContext('2d', { alpha: options.bgMode === 'transparent' || !!hasZoneMask }) as CanvasRenderingContext2D | null;
   if (!ctx) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
@@ -1150,6 +1157,49 @@ function renderToCanvas(
   }
 
   applyPostFX(ctx, cssW, cssH, options);
+
+  // Zone mask compositing: blend ASCII (current canvas) with original image using mask
+  if (hasZoneMask && src && zoneMask) {
+    const cw = canvas.width;
+    const ch = canvas.height;
+    // Get the rendered ASCII art as an image
+    const asciiData = ctx.getImageData(0, 0, cw, ch);
+
+    // Draw original image to get its pixel data
+    const origCanvas = document.createElement('canvas');
+    origCanvas.width = cw;
+    origCanvas.height = ch;
+    const origCtx = origCanvas.getContext('2d')!;
+    origCtx.drawImage(src, 0, 0, cw, ch);
+    const origData = origCtx.getImageData(0, 0, cw, ch);
+
+    // Composite using zone mask
+    const ad = asciiData.data;
+    const od = origData.data;
+    const mw = zoneMask.width;
+    const mh = zoneMask.height;
+    const md = zoneMask.data;
+
+    for (let py = 0; py < ch; py++) {
+      for (let px = 0; px < cw; px++) {
+        // Sample mask at this pixel position (scale mask coords to canvas coords)
+        const mx = Math.floor((px / cw) * mw);
+        const my = Math.floor((py / ch) * mh);
+        const maskVal = md[my * mw + mx] / 255; // 0..1
+
+        if (maskVal < 1) {
+          const i = (py * cw + px) * 4;
+          const invMask = 1 - maskVal;
+          // Blend: original * (1 - mask) + ascii * mask
+          ad[i]     = Math.round(od[i]     * invMask + ad[i]     * maskVal);
+          ad[i + 1] = Math.round(od[i + 1] * invMask + ad[i + 1] * maskVal);
+          ad[i + 2] = Math.round(od[i + 2] * invMask + ad[i + 2] * maskVal);
+          ad[i + 3] = Math.round(od[i + 3] * invMask + ad[i + 3] * maskVal);
+        }
+      }
+    }
+    ctx.putImageData(asciiData, 0, 0);
+  }
 }
 
 function applyPostFX(ctx: CanvasRenderingContext2D, w: number, h: number, o: AsciiOptions) {

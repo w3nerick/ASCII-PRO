@@ -22,9 +22,11 @@ import {
 import { Dropzone } from './Dropzone';
 import { AsciiViewer } from './AsciiViewer';
 import { CompareSlider } from './CompareSlider';
+import { ZonePainter, type ZoneShape } from './ZonePainter';
 import {
   type AsciiFrame,
   type AsciiOptions,
+  type ZoneMaskData,
   conversionKey,
   imageToAscii,
   videoFrameToAscii,
@@ -42,6 +44,10 @@ type Mode = 'idle' | 'image' | 'video' | 'webcam';
 interface Props {
   options: AsciiOptions;
   onFrame: (f: AsciiFrame | null) => void;
+  zoneMask: ZoneMaskData | null;
+  onZoneMaskChange: (mask: ZoneMaskData) => void;
+  zoneShapes: ZoneShape[];
+  onZoneShapesChange: (shapes: ZoneShape[]) => void;
 }
 
 export interface MediaStageHandle {
@@ -63,7 +69,7 @@ const MODE_LABEL: Record<Mode, string> = {
 };
 
 export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStage(
-  { options, onFrame },
+  { options, onFrame, zoneMask, onZoneMaskChange, zoneShapes, onZoneShapesChange },
   ref,
 ) {
   const [mode, setMode] = useState<Mode>('idle');
@@ -484,7 +490,18 @@ export const MediaStage = forwardRef<MediaStageHandle, Props>(function MediaStag
               options={options}
               sourceEl={sourceEl}
               onCanvasReady={(el) => { asciiCanvasRef.current = el; }}
+              zoneMask={zoneMask}
             />
+            {options.zoneMaskEnabled && sourceEl && (
+              <ZonePainter
+                width={sourceEl instanceof HTMLImageElement ? (sourceEl.naturalWidth || sourceEl.width) : (sourceEl as HTMLVideoElement).videoWidth || 640}
+                height={sourceEl instanceof HTMLImageElement ? (sourceEl.naturalHeight || sourceEl.height) : (sourceEl as HTMLVideoElement).videoHeight || 480}
+                enabled={options.zoneMaskEnabled}
+                shapes={zoneShapes}
+                onShapesChange={onZoneShapesChange}
+                onMaskChange={onZoneMaskChange}
+              />
+            )}
           </div>
         </div>
       )}

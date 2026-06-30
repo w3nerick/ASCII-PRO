@@ -130,6 +130,31 @@ export function ControlPanel({ options, onChange, onReset }: Props) {
         </div>
       </Group>
 
+      {/* ZONE PAINTER */}
+      <Group label="Zone Painter" defaultOpen={true}>
+        <Row label="Enabled">
+          <Switch value={options.zoneMaskEnabled} onChange={v => set('zoneMaskEnabled', v)} />
+        </Row>
+        {options.zoneMaskEnabled && (
+          <div style={{ padding: '10px 12px' }}>
+            <div style={{
+              padding: '10px 12px',
+              borderRadius: 10,
+              background: 'rgba(59,130,246,0.08)',
+              border: '0.5px solid rgba(59,130,246,0.2)',
+            }}>
+              <p className="footnote" style={{ lineHeight: 1.5, color: 'rgba(235,235,245,0.6)' }}>
+                Use the shape toolbar on the canvas to add zones. ASCII renders inside shapes, the original image shows outside.
+              </p>
+              <div style={{ marginTop: 8, display: 'flex', gap: 12, fontSize: 10, color: 'rgba(235,235,245,0.4)' }}>
+                <span>Drag — move</span>
+                <span>Handles — resize</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </Group>
+
       {/* MODE */}
       <Group label="Background">
         <Row label="Mode">
