@@ -38,12 +38,16 @@ export function ZonePainter({ width, height, enabled, shapes, onShapesChange, on
   const dragRef = useRef<{ mode: DragMode; startNx: number; startNy: number; orig: ZoneShape } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Rasterize mask from shapes
+  // Rasterize mask from shapes at reduced resolution (max 512px on longest side)
   useEffect(() => {
     if (width <= 0 || height <= 0) return;
-    const mask = new Uint8Array(width * height);
-    for (const shape of shapes) rasterize(mask, width, height, shape);
-    onMaskChange({ data: mask, width, height });
+    const MAX_MASK_DIM = 512;
+    const scale = Math.min(1, MAX_MASK_DIM / Math.max(width, height));
+    const mw = Math.max(1, Math.round(width * scale));
+    const mh = Math.max(1, Math.round(height * scale));
+    const mask = new Uint8Array(mw * mh);
+    for (const shape of shapes) rasterize(mask, mw, mh, shape);
+    onMaskChange({ data: mask, width: mw, height: mh });
   }, [shapes, width, height, onMaskChange]);
 
   const getNorm = useCallback((e: React.PointerEvent | PointerEvent) => {

@@ -10,6 +10,65 @@ interface Props {
   zoneMask?: ZoneMaskData | null;
 }
 
+// Cached offscreen canvases for zone mask compositing (avoids per-pixel loops)
+let _maskCanvas: HTMLCanvasElement | null = null;
+let _maskCtx: CanvasRenderingContext2D | null = null;
+let _maskKey = '';
+let _tempCanvas: HTMLCanvasElement | null = null;
+let _tempCtx: CanvasRenderingContext2D | null = null;
+let _origCanvas: HTMLCanvasElement | null = null;
+let _origCtx: CanvasRenderingContext2D | null = null;
+let _origSrcKey = '';
+
+function getMaskCanvas(zoneMask: ZoneMaskData): HTMLCanvasElement {
+  // Cache: only rebuild when mask data identity changes
+  const key = `${zoneMask.width}x${zoneMask.height}_${zoneMask.data.length > 0 ? zoneMask.data[0] + zoneMask.data[zoneMask.data.length - 1] + zoneMask.data[Math.floor(zoneMask.data.length / 2)] : 0}`;
+  if (_maskCanvas && _maskKey === key && _maskCanvas.width === zoneMask.width) {
+    return _maskCanvas;
+  }
+  if (!_maskCanvas) { _maskCanvas = document.createElement('canvas'); _maskCtx = _maskCanvas.getContext('2d')!; }
+  _maskCanvas.width = zoneMask.width;
+  _maskCanvas.height = zoneMask.height;
+  const id = _maskCtx!.createImageData(zoneMask.width, zoneMask.height);
+  const d = id.data;
+  for (let i = 0; i < zoneMask.data.length; i++) {
+    const v = zoneMask.data[i];
+    d[i * 4] = 255;
+    d[i * 4 + 1] = 255;
+    d[i * 4 + 2] = 255;
+    d[i * 4 + 3] = v; // alpha = mask value
+  }
+  _maskCtx!.putImageData(id, 0, 0);
+  _maskKey = key;
+  return _maskCanvas;
+}
+
+function getOrigCanvas(src: HTMLImageElement | HTMLVideoElement, cw: number, ch: number): HTMLCanvasElement {
+  const sw = src instanceof HTMLImageElement ? src.naturalWidth : (src as HTMLVideoElement).videoWidth;
+  const sh = src instanceof HTMLImageElement ? src.naturalHeight : (src as HTMLVideoElement).videoHeight;
+  const key = `${sw}x${sh}_${cw}x${ch}`;
+  // For video, always redraw (frame changes); for images, cache
+  const isVideo = src instanceof HTMLVideoElement;
+  if (!_origCanvas) { _origCanvas = document.createElement('canvas'); _origCtx = _origCanvas.getContext('2d')!; }
+  if (_origCanvas.width !== cw || _origCanvas.height !== ch) {
+    _origCanvas.width = cw;
+    _origCanvas.height = ch;
+  }
+  if (!isVideo && _origSrcKey === key) return _origCanvas;
+  _origCtx!.drawImage(src, 0, 0, cw, ch);
+  _origSrcKey = key;
+  return _origCanvas;
+}
+
+function getTempCanvas(cw: number, ch: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  if (!_tempCanvas) { _tempCanvas = document.createElement('canvas'); _tempCtx = _tempCanvas.getContext('2d', { alpha: true })!; }
+  if (_tempCanvas.width !== cw || _tempCanvas.height !== ch) {
+    _tempCanvas.width = cw;
+    _tempCanvas.height = ch;
+  }
+  return [_tempCanvas, _tempCtx!];
+}
+
 export function AsciiViewer({ frame, options, sourceEl, onCanvasReady, zoneMask }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const sourceRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
@@ -72,14 +131,19 @@ export function AsciiViewer({ frame, options, sourceEl, onCanvasReady, zoneMask 
     if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const tick = () => {
+    // Throttle to 30fps when zone mask is active to reduce GPU/CPU load
+    const interval = zoneMaskRef.current ? 1000 / 30 : 0;
+    let lastT = 0;
+    const tick = (t: number) => {
       animRef.current = requestAnimationFrame(tick);
+      if (interval > 0 && t - lastT < interval) return;
+      lastT = t;
       const f = animFrameRef.current;
       const o = animOptionsRef.current;
       if (!f || !canvas) return;
       renderToCanvas(canvas, f, o, sourceRef.current, zoneMaskRef.current);
     };
-    animRef.current = requestAnimationFrame(tick);
+    animRef.current = requestAnimationFrame(tick as any);
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
   }, [needsContinuousRender, frame, options.animatedAscii, zoneMask]);
 
@@ -1158,47 +1222,37 @@ function renderToCanvas(
 
   applyPostFX(ctx, cssW, cssH, options);
 
-  // Zone mask compositing: blend ASCII (current canvas) with original image using mask
+  // Zone mask compositing: GPU-accelerated using canvas compositing operations
+  // Strategy: draw original, then stamp ASCII only where mask is white
   if (hasZoneMask && src && zoneMask) {
     const cw = canvas.width;
     const ch = canvas.height;
-    // Get the rendered ASCII art as an image
-    const asciiData = ctx.getImageData(0, 0, cw, ch);
 
-    // Draw original image to get its pixel data
-    const origCanvas = document.createElement('canvas');
-    origCanvas.width = cw;
-    origCanvas.height = ch;
-    const origCtx = origCanvas.getContext('2d')!;
-    origCtx.drawImage(src, 0, 0, cw, ch);
-    const origData = origCtx.getImageData(0, 0, cw, ch);
+    // Get cached mask as a canvas (white alpha = mask coverage)
+    const maskCvs = getMaskCanvas(zoneMask);
 
-    // Composite using zone mask
-    const ad = asciiData.data;
-    const od = origData.data;
-    const mw = zoneMask.width;
-    const mh = zoneMask.height;
-    const md = zoneMask.data;
+    // Get cached original-image canvas
+    const origCvs = getOrigCanvas(src, cw, ch);
 
-    for (let py = 0; py < ch; py++) {
-      for (let px = 0; px < cw; px++) {
-        // Sample mask at this pixel position (scale mask coords to canvas coords)
-        const mx = Math.floor((px / cw) * mw);
-        const my = Math.floor((py / ch) * mh);
-        const maskVal = md[my * mw + mx] / 255; // 0..1
+    // Use temp canvas for compositing: ASCII masked by zone shapes
+    const [tmp, tmpCtx] = getTempCanvas(cw, ch);
+    tmpCtx.clearRect(0, 0, cw, ch);
 
-        if (maskVal < 1) {
-          const i = (py * cw + px) * 4;
-          const invMask = 1 - maskVal;
-          // Blend: original * (1 - mask) + ascii * mask
-          ad[i]     = Math.round(od[i]     * invMask + ad[i]     * maskVal);
-          ad[i + 1] = Math.round(od[i + 1] * invMask + ad[i + 1] * maskVal);
-          ad[i + 2] = Math.round(od[i + 2] * invMask + ad[i + 2] * maskVal);
-          ad[i + 3] = Math.round(od[i + 3] * invMask + ad[i + 3] * maskVal);
-        }
-      }
-    }
-    ctx.putImageData(asciiData, 0, 0);
+    // Step 1: Draw the mask (white regions = where ASCII shows)
+    tmpCtx.globalCompositeOperation = 'source-over';
+    tmpCtx.drawImage(maskCvs, 0, 0, cw, ch);
+
+    // Step 2: Draw ASCII art clipped by mask alpha ('source-in' keeps ASCII only where mask is opaque)
+    tmpCtx.globalCompositeOperation = 'source-in';
+    tmpCtx.drawImage(canvas, 0, 0);
+
+    // Step 3: Compose final — start with original image, layer masked ASCII on top
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.drawImage(origCvs, 0, 0);
+
+    // Step 4: Draw the masked ASCII on top (destination-over would put behind, we want on top)
+    ctx.drawImage(tmp, 0, 0);
   }
 }
 
