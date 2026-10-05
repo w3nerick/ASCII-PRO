@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Upload, Lightbulb, RefreshCw, Shuffle, LayoutGrid, Download, ImageIcon, Camera, Play, Pause, ArrowLeftRight } from 'lucide-react';
 import { getOutputCanvas, setMouse, setPreviewLong, fps, needsClock, onFrame, designSize } from '../state/renderer';
-import { getState, setUi, useStore, toast } from '../state/store';
+import { getState, setUi, useStore } from '../state/store';
 import { inspire, loadFile, startWebcam, setVideoPlaying } from '../state/source';
 import { restyle, shuffle } from '../state/actions';
 import { pickFile } from './filePicker';
@@ -16,6 +16,7 @@ export function Stage() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 800, h: 600 });
   const [dragging, setDragging] = useState(false);
+  const [glError, setGlError] = useState<string | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [space, setSpace] = useState(false);
   const [panning, setPanning] = useState(false);
@@ -38,7 +39,7 @@ export function Stage() {
         if (c.parentElement === host) host.removeChild(c);
       };
     } catch (e) {
-      toast(String((e as Error).message || e));
+      setGlError(String((e as Error).message || e));
     }
   }, []);
 
@@ -203,6 +204,7 @@ export function Stage() {
         <div className="empty" onClick={(e) => e.target === e.currentTarget && pickFile()}>
           <div className="empty-drop" />
           <div className="empty-icon"><ImageIcon size={58} strokeWidth={1} /></div>
+          {glError && <div className="empty-title" style={{ color: '#ff8a8a', marginBottom: 8 }}>WebGL2 is not available — try a recent Chrome, Edge, Firefox or Safari.</div>}
           <div className="empty-title">Drop an image or video here</div>
           <div className="empty-sub">or click to browse / paste from clipboard</div>
           <div className="empty-row">

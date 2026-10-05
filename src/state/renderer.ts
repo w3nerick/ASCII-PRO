@@ -15,6 +15,10 @@ let dirty = true;
 let clock = 0;
 let lastNow = 0;
 let previewLong = DESIGN_LONG;
+// Adaptive preview quality while animating (1 = full preview resolution).
+let quality = 1;
+let slowFrames = 0;
+let fastFrames = 0;
 let maskCanvas: HTMLCanvasElement | null = null;
 let maskVersion = 0;
 let textVersion = 0;
@@ -84,6 +88,15 @@ export function attachCanvas(canvas: HTMLCanvasElement): Engine {
     const s = getState();
     const animating = needsClock() && s.ui.playing;
     if (animating) {
+      if (dt > 1 / 22) slowFrames += 1;
+      else if (dt < 1 / 50) fastFrames += 1;
+      if (slowFrames > 20) {
+        quality = Math.max(0.45, quality * 0.85);
+        slowFrames = fastFrames = 0;
+      } else if (fastFrames > 90 && quality < 1) {
+        quality = Math.min(1, quality * 1.12);
+        slowFrames = fastFrames = 0;
+      }
       const speed = s.doc.look.animation.animated ? s.doc.look.animation.speed / 100 : 1;
       clock += dt * speed;
       tickSource(clock);
@@ -138,7 +151,8 @@ function syncEngine() {
     textVersion += 1;
   }
   engine.setTextRenderer(texts.length ? (w, h) => renderTextLayer(texts, w, h) : null, textVersion);
-  const size = engine.outputSize(previewLong);
+  const animating = needsClock() && s.ui.playing;
+  const size = engine.outputSize(Math.max(480, Math.round(previewLong * (animating ? quality : 1))));
   const design = engine.outputSize(DESIGN_LONG);
   engine.setSize(size.w, size.h, size.w / design.w);
 }

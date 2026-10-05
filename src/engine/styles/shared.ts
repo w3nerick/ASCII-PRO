@@ -32,7 +32,7 @@ export function charsetParams(charset = 0, fontSize = 11): ParamDef[] {
   return [
     { key: 'fontSize', label: 'Font Size', type: 'range', min: 4, max: 64, step: 1, default: fontSize },
     {
-      key: 'charset', label: 'Character Set', type: 'select', options: CHARSET_OPTIONS, default: charset,
+      key: 'charset', label: 'Character Set', type: 'select', options: CHARSET_OPTIONS, default: charset, noUniform: true,
       sets: { chars: CHARSET_RAMPS },
     },
     { key: 'chars', label: 'Chars', type: 'text', default: CHARSET_RAMPS[charset], atlas: true },

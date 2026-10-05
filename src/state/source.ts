@@ -165,25 +165,30 @@ export async function loadImageBlob(blob: Blob, name = 'image') {
 }
 
 export async function loadVideoBlob(blob: Blob, name = 'video') {
-  cleanup();
   const url = URL.createObjectURL(blob);
   const v = document.createElement('video');
-  v.src = url;
   v.muted = true;
   v.loop = true;
   v.playsInline = true;
+  v.autoplay = true;
+  v.preload = 'auto';
   v.crossOrigin = 'anonymous';
+  v.src = url;
   try {
     await new Promise<void>((res, rej) => {
-      v.onloadeddata = () => res();
-      v.onerror = () => rej(new Error('video'));
+      const ok = () => (v.videoWidth ? res() : undefined);
+      v.addEventListener('loadeddata', ok, { once: true });
+      v.addEventListener('canplay', ok, { once: true });
+      v.addEventListener('error', () => rej(new Error('video')), { once: true });
+      v.play().catch(() => undefined);
+      setTimeout(() => (v.videoWidth ? res() : rej(new Error('timeout'))), 10000);
     });
-    await v.play().catch(() => undefined);
   } catch {
     URL.revokeObjectURL(url);
     toast('Could not play that video');
     return;
   }
+  cleanup();
   objectUrl = url;
   video = v;
   fileBlob = blob;

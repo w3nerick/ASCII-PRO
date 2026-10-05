@@ -52,8 +52,8 @@ export function TopBar() {
       <div className="tb-right">
         <button className="icon-btn tip below" data-tip="Webcam" onClick={() => startWebcam()}><Camera size={16} /></button>
         {source && <button className="icon-btn tip below" data-tip="Close image" onClick={() => clearSource()}><X size={16} /></button>}
-        <button className="icon-btn tip below" data-tip="Toggle styles panel" onClick={() => setUi({ leftOpen: !ui.leftOpen })}><PanelLeft size={16} /></button>
-        <button className="icon-btn tip below" data-tip="Toggle settings panel" onClick={() => setUi({ rightOpen: !ui.rightOpen })}><PanelRight size={16} /></button>
+        <button className="icon-btn tip below panel-toggle" data-tip="Toggle styles panel" onClick={() => setUi({ leftOpen: !ui.leftOpen })}><PanelLeft size={16} /></button>
+        <button className="icon-btn tip below panel-toggle" data-tip="Toggle settings panel" onClick={() => setUi({ rightOpen: !ui.rightOpen })}><PanelRight size={16} /></button>
         <button className="tb-chip" onClick={() => setUi({ modal: 'help' })}><HelpCircle size={14} /> Shortcuts</button>
       </div>
     </header>

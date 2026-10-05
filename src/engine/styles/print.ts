@@ -84,8 +84,8 @@ vec4 effect(vec2 uv){
     vec2 cp = id + o;
     vec3 c = Sc(fromTl(cp * s));
     float dark = pow(1.0 - luma(c), u_gamma / 100.0);
-    float keep = step(hash12(id * 1.91 + 3.0), dark * 1.05);
-    float r = (0.14 + 0.14 * dark) * u_dot / 100.0;
+    float keep = step(hash12(id * 1.91 + 3.0), pow(dark, 0.9) * 1.05);
+    float r = (0.16 + 0.3 * dark) * u_dot / 100.0;
     float d = length(p - cp) - r;
     float a = aa(d * s, 1.0) * keep;
     if (a > m){ m = a; dc = u_colorDots > 0.5 ? c * 0.85 : u_ink; }

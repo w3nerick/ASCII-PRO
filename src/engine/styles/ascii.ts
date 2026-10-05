@@ -122,7 +122,7 @@ const block: StyleDef = {
   params: [
     ...backdrop(1, 8, 100, '#050507'),
     { key: 'fontSize', label: 'Block Size', type: 'range', min: 4, max: 64, step: 1, default: 14 },
-    { key: 'charset', label: 'Blocks', type: 'select', options: [{ label: 'Shades', value: 5 }, { label: 'Bars', value: 6 }, { label: 'Quadrants', value: 7 }], default: 5, sets: { chars: [CHARSET_RAMPS[5], CHARSET_RAMPS[6], CHARSET_RAMPS[7]] } },
+    { key: 'charset', label: 'Blocks', type: 'select', noUniform: true, options: [{ label: 'Shades', value: 5 }, { label: 'Bars', value: 6 }, { label: 'Quadrants', value: 7 }], default: 5, sets: { chars: [CHARSET_RAMPS[5], CHARSET_RAMPS[6], CHARSET_RAMPS[7]] } },
     { key: 'chars', label: 'Chars', type: 'text', default: CHARSET_RAMPS[5], atlas: true },
     ...inkParams(0, '#f2f2f2'),
     range('levels', 'Levels', 2, 16, 5),

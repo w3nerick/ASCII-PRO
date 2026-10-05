@@ -26,6 +26,7 @@ export function ExportPopover({ style }: { style?: React.CSSProperties }) {
 
   const run = async () => {
     if (!source || busy) return;
+    if (getState().ui.tool === 'crop') setUi({ tool: 'none' });
     setBusy(true);
     setProgress(0);
     try {

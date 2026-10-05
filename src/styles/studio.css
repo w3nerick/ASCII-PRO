@@ -475,7 +475,10 @@ textarea.text-input { height: 64px; padding: 8px 10px; resize: vertical; line-he
   .left, .rail, .dock { position: fixed; left: 0; right: 0; bottom: calc(56px + env(safe-area-inset-bottom)); z-index: 60; border: 0; border-top: 1px solid var(--border-2); height: min(62dvh, 560px); transform: translateY(110%); transition: transform 0.22s ease; border-radius: 12px 12px 0 0; }
   .rail { height: auto; top: auto; flex-direction: row; justify-content: center; padding: 6px; bottom: calc(56px + env(safe-area-inset-bottom) + min(62dvh, 560px)); border-radius: 12px 12px 0 0; background: var(--panel); }
   .app.m-styles .left { transform: none; }
-  .app.m-settings .dock, .app.m-settings .rail { transform: none; }
+  .rail { display: none; }
+  .app.m-settings .rail { display: flex; transform: none; }
+  .app.m-settings .dock { transform: none; }
+  .tb-right .tb-chip, .tb-right .icon-btn.panel-toggle { display: none; }
   .dock { width: auto; }
   .tip[data-tip]:hover::after { display: none; }
   .tb-center { display: none; }

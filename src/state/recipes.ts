@@ -1,6 +1,6 @@
 // Recipes: shareable codes for a look + curated presets.
 import type { Look, ParamValue } from '../engine/types';
-import { makeLayer } from '../engine/styles';
+import { defaultParams, getStyle, makeLayer } from '../engine/styles';
 import { defaultLook, normalizeLook } from './defaults';
 import { CHARSETS } from '../engine/palettes';
 
@@ -22,12 +22,38 @@ async function pipe(bytes: Uint8Array, stream: CompressionStream | Decompression
   return new Uint8Array(await res.arrayBuffer());
 }
 
-/** Strip ids so codes stay short and stable. */
+/** Keep only values that differ from the defaults (short, stable codes). */
+function diff(def: unknown, val: unknown): unknown {
+  if (val && typeof val === 'object' && !Array.isArray(val) && def && typeof def === 'object' && !Array.isArray(def)) {
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(val as object)) {
+      const d = diff((def as Record<string, unknown>)[k], (val as Record<string, unknown>)[k]);
+      if (d !== undefined) out[k] = d;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+  return JSON.stringify(def) === JSON.stringify(val) ? undefined : val;
+}
+
 function serializable(look: Look) {
-  return {
-    ...look,
-    layers: look.layers.map((l) => ({ styleId: l.styleId, params: l.params, enabled: l.enabled, opacity: l.opacity, blend: l.blend })),
+  const base = defaultLook();
+  const out: Record<string, unknown> = {
+    layers: look.layers.map((l) => {
+      const st = getStyle(l.styleId);
+      const p = diff(defaultParams(st), l.params);
+      const o: Record<string, unknown> = { styleId: l.styleId };
+      if (p) o.params = p;
+      if (!l.enabled) o.enabled = false;
+      if (l.opacity !== 100) o.opacity = l.opacity;
+      if (l.blend !== 'normal') o.blend = l.blend;
+      return o;
+    }),
   };
+  for (const k of ['color', 'blur', 'post', 'lights', 'animation', 'depth', 'mask'] as const) {
+    const d = diff(base[k], look[k]);
+    if (d) out[k] = d;
+  }
+  return out;
 }
 
 export async function encodeRecipe(look: Look): Promise<string> {

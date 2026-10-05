@@ -11,7 +11,7 @@ function shapeStyle(id: string, name: string, icon: string, tags: string[], shap
       range('scale', 'Scale', 10, 200, 100, { unit: '%' }),
       range('thick', 'Thickness', 5, 100, 28, { unit: '%' }),
       ...extra,
-      ...inkParams(0, '#ffffff'),
+      ...inkParams(1, '#ffffff'),
       toggle('invert', 'Invert Mapping'),
     ],
     glsl: /* glsl */ `

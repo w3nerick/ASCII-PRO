@@ -1,91 +1,154 @@
-# ASCII-PRO
+<div align="center">
 
-> Cyberpunk-styled ASCII art generator for images, videos and webcam streams. 100% client-side.
+# ✦ ASCII PRO
 
-Inspired by ASCII, reimagined with a Neo-Tokyo aesthetic: neon glow, scanlines, glitch text, and `Share Tech Mono`.
+**Estudio de imagen ASCII y shaders en tiempo real — 100 estilos, todo en tu navegador.**
 
-## Deploy
+[![CI](https://github.com/w3nerick/ASCII-PRO/actions/workflows/ci.yml/badge.svg)](https://github.com/w3nerick/ASCII-PRO/actions/workflows/ci.yml)
+![WebGL2](https://img.shields.io/badge/WebGL2-shaders-black)
+![React 18](https://img.shields.io/badge/React-18-black)
+![Vite 5](https://img.shields.io/badge/Vite-5-black)
+![Estilos](https://img.shields.io/badge/estilos-100-black)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fw3nerick%2FASCII-PRO&project-name=ascii-pro&repository-name=ascii-pro)
+[ascii-pro.vercel.app](https://ascii-pro.vercel.app)
 
-Click the button above to deploy your own copy in less than a minute.
-The repo ships with a `vercel.json`, so Vercel auto-detects Vite and you don't need to configure anything.
+![Studio](docs/img/studio.jpg)
 
-## Features
+| ASCII Studio | Comparar antes / después | Flow (nodos) |
+|---|---|---|
+| ![ASCII Studio](docs/img/ascii-studio.jpg) | ![Compare](docs/img/compare.jpg) | ![Flow](docs/img/flow.jpg) |
 
-### Input
-- Drag & drop image upload (PNG / JPG / WEBP / GIF).
-- Video upload with frame-by-frame conversion (MP4 / WEBM).
-- Live webcam ASCII stream.
+| Móvil | Ajustes en móvil | Todos los estilos |
+|---|---|---|
+| ![Mobile](docs/img/mobile.jpg) | ![Mobile settings](docs/img/mobile-settings.jpg) | ![All styles](docs/img/all-styles.jpg) |
 
-### Image pipeline
-- Resolution slider (32–300 columns).
-- Brightness, contrast, saturation, blur sliders.
-- Sobel edge detection with adjustable threshold.
-- Floyd-Steinberg dithering for high-detail output.
-- Color / mono / inverted modes.
-- Configurable background and foreground colors.
+</div>
 
-### Charsets
-11 ramps: standard, detailed, blocks, binary, minimal, matrix, cyberpunk, glitch, braille, shades, and **custom** (type your own ramp).
+## Índice
 
-### Output
-- Adjustable font size (zoom).
-- Live preview with cyberpunk styling.
-- Fullscreen mode.
+- [Qué es](#qué-es)
+- [Funciones](#funciones)
+- [Estructura](#estructura)
+- [Inicio rápido](#inicio-rápido)
+- [Agregar un estilo](#agregar-un-estilo)
+- [Verificación](#verificación)
+- [Deploy](#deploy)
+- [Documentación](#documentación)
+- [Privacidad](#privacidad)
+- [Créditos y licencias](#créditos-y-licencias)
 
-### Export
-- Copy text to clipboard.
-- Download as `.txt`.
-- Download as `.html` (with inline color preserved).
-- Download as `.png` (rendered to your chosen colors).
-- Open standalone preview in a new tab.
-- **Record live ASCII video to `.webm`** (works for video files and webcam).
+## Qué es
 
-### Privacy
-Zero backend, zero tracking, zero uploads. Everything runs in your browser using the Canvas 2D API.
+ASCII PRO convierte fotos, video, webcam o escenas generativas en arte ASCII y en más de 90 looks de shader
+(dither, risograph, halftone, vidrio, glitch, materiales…). Todo corre en la GPU con WebGL2: no hay backend,
+no se sube nada. La interfaz tiene dos modos:
 
-## Tech stack
+- **Studio** — panel de estilos con miniaturas en vivo de *tu* imagen, lienzo central y panel de propiedades.
+- **Flow** — editor de nodos `Source → Style → Style → … → Output` para encadenar efectos.
 
-| Layer | Tool |
-|---|---|
-| Build | Vite 5 |
-| UI | React 18 + TypeScript |
-| Styling | Tailwind CSS + custom cyberpunk theme |
-| Icons | lucide-react |
-| Image processing | Canvas 2D + custom Sobel / Floyd-Steinberg |
-| Video recording | MediaRecorder + canvas.captureStream() |
+## Funciones
 
-## Getting started
+**Fuentes**
+- Arrastrar y soltar, pegar del portapapeles (⌘V) o subir imagen / video.
+- Webcam en vivo, 12 fotos de muestra (*Inspire*) y 13 generadores (shaders animados y escenas).
 
-```bash
-npm install
-npm run dev
-```
+**Estilos — 100 en 10 categorías** ([catálogo completo](docs/estilos.md))
+- ASCII & Text · Pixel & Blocks · Print & Paper · Geometric · Distort · Blur & Focus · Glitch & Signal ·
+  Light & Color · Glass · Material & Texture.
+- Cada estilo tiene sus parámetros; los de caracteres permiten 21 sets, texto propio y 5 fuentes.
+- **Capas**: apila estilos con opacidad y 10 modos de fusión (Shift+clic en un estilo lo agrega como capa).
 
-Open http://localhost:5173
+**Panel de propiedades**
+- Style (backdrop, parámetros, intensidad, 9 tipos de desenfoque), Layers, Depth (Wave, Splay, Color Split, Etch),
+  Animation (lluvia tipo Matrix en 8 direcciones, shimmer, velocidad), Lights (foco que sigue al cursor o luces fijas),
+  Color (filtros, tinte, saturación, vibrance, tono, temperatura, gradient maps), Post FX (18 efectos) y Mask.
 
-## Build for production
+**Herramientas**
+- Zoom y paneo (espacio + arrastrar), recorte con proporciones, rotar y voltear.
+- Comparador antes/después, capas de texto, máscara pintable (pincel, rectángulo, elipse, borrador).
+- Deshacer / rehacer, *Restyle* (re-tira los parámetros), *Shuffle* (estilo al azar).
+- **Recetas**: comparte tu look como enlace o código corto; quien lo abre aplica tus ajustes a su propia imagen.
+- **Library**: guarda trabajos en el navegador (IndexedDB).
 
-```bash
-npm run build
-npm run preview
-```
+**Exportar**
+- PNG, JPG y WebP a 1×–4× (hasta 5120 px), GIF animado, video MP4/WebM, y TXT/HTML para estilos de caracteres.
 
-The `dist/` folder is fully static and can be deployed to any free host
-(Vercel, Netlify, GitHub Pages, Cloudflare Pages).
-
-## Project structure
+## Estructura
 
 ```
 src/
-├── components/   UI: Header, Dropzone, ControlPanel, MediaStage, AsciiViewer, ExportBar, GlitchText
-├── lib/          asciiConverter, charsets, exporters, loadMedia, videoRecorder
-├── styles/       Cyberpunk theme (neon, scanlines, glitch)
-├── App.tsx
-└── main.tsx
+├── engine/                 # Motor WebGL2 (sin React)
+│   ├── engine.ts           # Pipeline: pre-ajuste → blur → capas → post FX → composición final
+│   ├── passes.ts           # Shaders fijos: pre, blur, bloom, post FX, final (máscara/texto/comparar)
+│   ├── shaderLib.ts        # GLSL común + generación automática de uniforms por estilo
+│   ├── glyphAtlas.ts       # Atlas de caracteres (canvas → textura con mipmaps)
+│   ├── palettes.ts         # Sets de caracteres, paletas, gradient maps, térmicos
+│   ├── types.ts            # Tipos: StyleDef, ParamDef, Look, Layer…
+│   └── styles/             # 100 estilos, un archivo por categoría + index.ts (registro)
+├── state/                  # Estado de la app
+│   ├── store.ts            # Store externo + historial (deshacer/rehacer)
+│   ├── renderer.ts         # Loop de render, miniaturas, exportaciones
+│   ├── source.ts           # Imagen / video / webcam / generadores / muestras
+│   ├── recipes.ts          # Códigos de receta + recetas curadas
+│   ├── mask.ts · textLayer.ts · library.ts · actions.ts · defaults.ts
+├── ui/                     # Componentes React (TopBar, StylesPanel, Stage, Dock, FlowView, modales, overlays)
+├── lib/                    # Generadores Lumen (WebGL2), escenas procedurales, codificador GIF
+└── styles/studio.css       # Sistema de diseño (tokens, layout, móvil)
+public/
+├── fonts/                  # Geist, Geist Mono, Geist Pixel (OFL)
+└── samples/                # Fotos de muestra (WebP)
+scripts/check.mjs           # Verificación del registro de estilos (sin GPU)
+dev-shaders.html            # Hoja de contacto de los 100 estilos (QA visual en desarrollo)
+docs/                       # Arquitectura, catálogo de estilos, capturas
 ```
 
-## License
+## Inicio rápido
 
-MIT
+```bash
+npm install
+npm run dev        # http://localhost:5173
+npm run build      # build de producción en dist/
+```
+
+QA visual de todos los estilos con el servidor de desarrollo encendido:
+`http://localhost:5173/dev-shaders.html?from=0&n=50` (y `from=50`).
+
+## Agregar un estilo
+
+1. Abre el archivo de la categoría en `src/engine/styles/` (por ejemplo `print.ts`).
+2. Declara un `StyleDef` con `id`, `name`, `category`, `tags`, `icon`, `params` y `glsl`.
+3. El GLSL solo necesita `vec4 effect(vec2 uv)`. Cada parámetro llega como uniform `u_<key>`
+   (no hace falta declararlo). Helpers disponibles: `S/Sc/Sl` (muestrear), `tl/fromTl` (píxeles),
+   `PX()` (px de diseño → px de render), `cellAvg`, `glyph3`, `gradMap`, `nearestPal`, `sobel`, `voronoi`…
+4. Agrégalo al arreglo exportado del archivo y corre `npm run check`.
+5. `npm run catalog` actualiza [docs/estilos.md](docs/estilos.md).
+
+Detalles en [docs/arquitectura.md](docs/arquitectura.md).
+
+## Verificación
+
+```bash
+npm run check      # registro: ids únicos, claves reservadas, defaults válidos, uniforms usados, showIf, assets
+npm run verify     # check + build (lo mismo que corre CI en cada push / PR)
+```
+
+## Deploy
+
+Vercel detecta Vite (`vercel.json` incluido). `main` se publica en producción; cada rama genera un preview.
+
+## Documentación
+
+- [docs/arquitectura.md](docs/arquitectura.md) — pipeline de render, estado, miniaturas, exportación.
+- [docs/estilos.md](docs/estilos.md) — catálogo de los 100 estilos.
+
+## Privacidad
+
+Cero backend, cero analítica, cero subidas. Las imágenes se procesan en tu GPU y la Library vive en tu navegador.
+
+## Créditos y licencias
+
+- Código: MIT.
+- Fuentes Geist / Geist Mono / Geist Pixel © Vercel — SIL Open Font License 1.1 (`public/fonts/OFL.txt`).
+- Fotos de muestra de Unsplash (licencia Unsplash) servidas por picsum.photos.
+- Generadores Lumen portados de [lumenshaders](https://github.com/Leonxlnx/lumenshaders) (MIT).
+- Versión anterior (Canvas 2D) disponible en la etiqueta `v1-classic`.
