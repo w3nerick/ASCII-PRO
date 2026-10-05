@@ -1,159 +1,176 @@
-import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { SlidersHorizontal } from 'lucide-react';
-import { ErrorBoundary } from './components/ErrorBoundary';
-import { Header } from './components/Header';
-import { ControlPanel } from './components/ControlPanel';
-import { MediaStage, type MediaStageHandle } from './components/MediaStage';
-import { ExportBar } from './components/ExportBar';
-import { HelpModal } from './components/HelpModal';
-import { MobileSheet } from './components/MobileSheet';
-import { Gallery } from './components/Gallery';
-import { DEFAULT_OPTIONS, type AsciiOptions, type AsciiFrame, type ZoneMaskData } from './lib/asciiConverter';
-import type { ZoneShape } from './components/ZonePainter';
-import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { useHistory } from './hooks/useHistory';
-import { copyText } from './lib/exporters';
-import { loadFromUrl, clearShareFromUrl } from './lib/shareCodes';
+import { useEffect } from 'react';
+import { Palette, SlidersHorizontal, Upload, Download } from 'lucide-react';
+import { TopBar } from './ui/TopBar';
+import { StylesPanel } from './ui/StylesPanel';
+import { Stage } from './ui/Stage';
+import { RightRail, Dock } from './ui/Dock';
+import { RecipesModal, LibraryModal, HelpModal, AllStylesModal, Toast } from './ui/Modals';
+import { FlowView } from './ui/FlowView';
+import { getState, redo, replaceLook, setUi, toast, undo, useStore } from './state/store';
+import { loadFile, inspire, setVideoPlaying } from './state/source';
+import { restyle, shuffle, stepStyle } from './state/actions';
+import { decodeRecipe, recipeFromHash } from './state/recipes';
+import { addText } from './ui/overlays/TextOverlay';
+import { pickFile } from './ui/filePicker';
+import { patchLook } from './state/store';
 
-export default function App() {
-  // Load initial options from URL share code if present
-  const initialOptions = useMemo(() => {
-    const shared = loadFromUrl();
-    if (shared) {
-      clearShareFromUrl();
-      return shared;
-    }
-    return DEFAULT_OPTIONS;
-  }, []);
-
-  const history = useHistory<AsciiOptions>(initialOptions);
-  const options = history.value;
-  const setOptions = useCallback((next: AsciiOptions | ((prev: AsciiOptions) => AsciiOptions)) => {
-    if (typeof next === 'function') {
-      history.set(next(history.value));
-    } else {
-      history.set(next);
-    }
-  }, [history]);
-
-  const [frame, setFrame] = useState<AsciiFrame | null>(null);
-  const [help, setHelp] = useState(false);
-  const [gallery, setGallery] = useState(false);
-  const [mobileControls, setMobileControls] = useState(false);
-  const [notification, setNotification] = useState<string | null>(null);
-  const [zoneMask, setZoneMask] = useState<ZoneMaskData | null>(null);
-  const [zoneShapes, setZoneShapes] = useState<ZoneShape[]>([]);
-  const stageRef = useRef<MediaStageHandle | null>(null);
-
-  const showNotification = useCallback((msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 2500);
-  }, []);
-
-  // Handle share code from URL changes (e.g., browser back/forward)
+function useGlobalInput() {
   useEffect(() => {
-    const handleHashChange = () => {
-      const shared = loadFromUrl();
-      if (shared) {
-        clearShareFromUrl();
-        setOptions(shared);
-        showNotification('Loaded shared style');
+    const onPaste = (e: ClipboardEvent) => {
+      if ((e.target as HTMLElement)?.closest?.('input,textarea')) return;
+      const item = Array.from(e.clipboardData?.items || []).find((i) => i.type.startsWith('image/') || i.type.startsWith('video/'));
+      const f = item?.getAsFile();
+      if (f) {
+        e.preventDefault();
+        loadFile(f);
       }
     };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [setOptions, showNotification]);
-
-  const shortcuts = useMemo(() => ({
-    ' ': () => stageRef.current?.togglePlay(),
-    r: () => stageRef.current?.toggleRecord(),
-    f: () => stageRef.current?.toggleFullscreen(),
-    d: () => stageRef.current?.loadDemo(),
-    w: () => stageRef.current?.startWebcam(),
-    escape: () => {
-      if (help) setHelp(false);
-      else if (mobileControls) setMobileControls(false);
-      else stageRef.current?.reset();
-    },
-    c: () => {
-      if (frame) {
-        copyText(frame)
-          .then(() => showNotification('Copied to clipboard'))
-          .catch(() => showNotification('Clipboard access denied'));
+    const onDragOver = (e: DragEvent) => e.preventDefault();
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      const f = e.dataTransfer?.files?.[0];
+      if (f) loadFile(f);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t?.closest?.('input,textarea,select,[contenteditable]')) return;
+      const s = getState();
+      const mod = e.metaKey || e.ctrlKey;
+      const k = e.key.toLowerCase();
+      if (mod && k === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
       }
-    },
-    i: () => setOptions(o => ({ ...o, invert: !o.invert })),
-    m: () => setOptions(o => ({ ...o, color: !o.color })),
-    '?': () => setHelp(v => !v),
-    'z': () => history.undo(),
-    'y': () => history.redo(),
-  }), [frame, help, mobileControls, history, setOptions, showNotification]);
-  useKeyboardShortcuts(shortcuts);
+      if (mod && k === 'y') {
+        e.preventDefault();
+        redo();
+        return;
+      }
+      if (mod && e.key === '\\') {
+        e.preventDefault();
+        const open = s.ui.leftOpen || s.ui.rightOpen;
+        setUi({ leftOpen: !open, rightOpen: !open });
+        return;
+      }
+      if (mod || e.altKey) return;
+      if (s.ui.modal) return;
+      const hasSrc = !!s.source;
+      switch (k) {
+        case 'escape':
+          setUi({ tool: 'none', exportOpen: false, selectedText: null, compare: false });
+          break;
+        case 'o':
+          pickFile();
+          break;
+        case 'i':
+          inspire();
+          break;
+        case 'r':
+          if (hasSrc) restyle();
+          break;
+        case 's':
+          if (hasSrc) shuffle();
+          break;
+        case '[':
+          stepStyle(-1);
+          break;
+        case ']':
+          stepStyle(1);
+          break;
+        case 'e':
+          if (hasSrc) setUi({ exportOpen: !s.ui.exportOpen });
+          break;
+        case 'b':
+          if (hasSrc) setUi({ compare: !s.ui.compare });
+          break;
+        case 'c':
+          if (hasSrc && s.ui.mode === 'studio') setUi({ tool: s.ui.tool === 'crop' ? 'none' : 'crop' });
+          break;
+        case 't':
+          if (hasSrc && s.ui.mode === 'studio') (s.ui.tool === 'text' ? setUi({ tool: 'none' }) : addText());
+          break;
+        case 'm':
+          if (hasSrc) {
+            const on = !(s.ui.tool === 'mask');
+            if (on) patchLook('mask', { enabled: true });
+            setUi({ tool: on ? 'mask' : 'none', rightTab: 'mask', rightOpen: true });
+          }
+          break;
+        case 'k': {
+          const playing = !s.ui.playing;
+          setUi({ playing });
+          setVideoPlaying(playing);
+          break;
+        }
+        case 'f':
+          setUi({ zoom: 0 });
+          break;
+        case '=':
+        case '+':
+          setUi({ zoom: Math.min(800, Math.round((s.ui.zoom || 100) * 1.25)) });
+          break;
+        case '-':
+          setUi({ zoom: Math.max(10, Math.round((s.ui.zoom || 100) / 1.25)) });
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+    };
+    window.addEventListener('paste', onPaste);
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('paste', onPaste);
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, []);
+}
 
+function useRecipeFromUrl() {
+  useEffect(() => {
+    const code = recipeFromHash();
+    if (!code) return;
+    decodeRecipe(code).then((look) => {
+      if (look) {
+        replaceLook(look);
+        toast('Recipe loaded — drop your image to apply it');
+      } else toast('Recipe link is invalid');
+      history.replaceState(null, '', location.pathname + location.search);
+    });
+  }, []);
+}
+
+export default function App() {
+  useGlobalInput();
+  useRecipeFromUrl();
+  const ui = useStore((s) => s.ui);
+  const cls = ['app', ui.mode === 'flow' ? 'flow-mode' : '', ui.leftOpen ? '' : 'left-closed', ui.rightOpen ? '' : 'right-closed', ui.mobilePanel ? `m-${ui.mobilePanel}` : ''].join(' ');
   return (
-    <ErrorBoundary>
-    <div className="flex flex-col" style={{ height: '100dvh', background: 'var(--bg)', overflow: 'hidden' }}>
-      <Header onHelp={() => setHelp(true)} onGallery={() => setGallery(true)} />
-
-      {/* Desktop layout */}
-      <div className="hidden md:flex flex-1 min-h-0">
-        <div className="flex flex-col flex-1 min-w-0 p-4 gap-3 fade-in-up">
-          <MediaStage ref={stageRef} options={options} onFrame={setFrame} zoneMask={zoneMask} onZoneMaskChange={setZoneMask} zoneShapes={zoneShapes} onZoneShapesChange={setZoneShapes} />
-          <ExportBar frame={frame} options={options} />
-        </div>
-        <div
-          className="shrink-0 border-l flex flex-col overflow-hidden slide-in-right"
-          style={{ width: 280, background: 'var(--bg-elevated)', borderColor: 'var(--separator)', animationDelay: '150ms' }}
-        >
-          <ControlPanel
-            options={options}
-            onChange={setOptions}
-            onReset={() => setOptions(DEFAULT_OPTIONS)}
-          />
-        </div>
+    <div className={cls}>
+      <TopBar />
+      <div className="main">
+        {ui.leftOpen || ui.mobilePanel === 'styles' ? <StylesPanel /> : <div />}
+        {ui.mode === 'flow' ? <FlowView /> : <Stage />}
+        <RightRail />
+        {ui.rightOpen || ui.mobilePanel === 'settings' ? <Dock /> : <div />}
       </div>
-
-      {/* Mobile layout */}
-      <div className="flex md:hidden flex-col flex-1 min-h-0 overflow-hidden">
-        <div className="flex flex-col flex-1 min-h-0 px-2 pt-2">
-          <MediaStage ref={stageRef} options={options} onFrame={setFrame} zoneMask={zoneMask} onZoneMaskChange={setZoneMask} zoneShapes={zoneShapes} onZoneShapesChange={setZoneShapes} />
-        </div>
-
-        {/* iOS-style bottom bar */}
-        <div className="mobile-bar shrink-0">
-          <ExportBar frame={frame} options={options} compact />
-          <button
-            type="button"
-            onClick={() => setMobileControls(true)}
-            className="fab shrink-0"
-          >
-            <SlidersHorizontal className="w-[18px] h-[18px]" strokeWidth={2} />
-            <span>Adjust</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile controls bottom sheet */}
-      <MobileSheet open={mobileControls} onClose={() => setMobileControls(false)} title="Controls">
-        <ControlPanel
-          options={options}
-          onChange={setOptions}
-          onReset={() => setOptions(DEFAULT_OPTIONS)}
-        />
-      </MobileSheet>
-
-      <HelpModal open={help} onClose={() => setHelp(false)} />
-      <Gallery open={gallery} onClose={() => setGallery(false)} />
-
-      {notification && (
-        <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-sm z-[9999] pointer-events-none fade-in-up"
-          style={{ background: 'var(--bg-elevated)', color: 'var(--label-primary)', border: '1px solid var(--separator)' }}
-        >
-          {notification}
-        </div>
-      )}
+      <nav className="mobile-tabs" aria-label="Mobile navigation">
+        <button className={ui.mobilePanel === 'styles' ? 'on' : ''} onClick={() => setUi({ mobilePanel: ui.mobilePanel === 'styles' ? null : 'styles', leftOpen: true })}><Palette size={18} />Styles</button>
+        <button className={ui.mobilePanel === 'settings' ? 'on' : ''} onClick={() => setUi({ mobilePanel: ui.mobilePanel === 'settings' ? null : 'settings', rightOpen: true })}><SlidersHorizontal size={18} />Adjust</button>
+        <button onClick={() => { setUi({ mobilePanel: null }); pickFile(); }}><Upload size={18} />Upload</button>
+        <button onClick={() => setUi({ mobilePanel: null, exportOpen: !ui.exportOpen })}><Download size={18} />Export</button>
+      </nav>
+      {ui.modal === 'recipes' && <RecipesModal />}
+      {ui.modal === 'library' && <LibraryModal />}
+      {ui.modal === 'help' && <HelpModal />}
+      {ui.modal === 'allStyles' && <AllStylesModal />}
+      <Toast />
     </div>
-    </ErrorBoundary>
   );
 }
