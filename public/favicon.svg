@@ -1,10 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0A84FF"/>
-      <stop offset="100%" stop-color="#5E5CE6"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="14" fill="url(#g)"/>
-  <text x="50%" y="56%" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif" font-size="36" font-weight="700" fill="#ffffff">A</text>
+  <rect width="64" height="64" rx="14" fill="#040406"/>
+  <path d="M30 9l5.8 16 17.2.9-13.5 10.6 4.9 16.6L30 43.6l-14.4 9.5 4.9-16.6L7 25.9l17.2-.9z" fill="#f5d36b"/>
+  <rect x="47" y="8" width="8" height="8" fill="#fff"/>
+  <rect x="8" y="48" width="6" height="6" fill="#fff" opacity=".8"/>
 </svg>
