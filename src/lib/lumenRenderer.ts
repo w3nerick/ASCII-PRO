@@ -568,3 +568,66 @@ export const LUMEN_MODES = [
   { id: 7, label: 'REEDED', hint: 'Reeded Glass — refracted strips' },
   { id: 8, label: 'MOSAIC', hint: 'Pixel Bloom — mosaic blocks' },
 ];
+
+/* ─── Live (animated) generator ───────────────────────────────── */
+
+/** Renders a Lumen mode every frame into its own canvas (used as an animated source). */
+export class LumenSource {
+  readonly canvas: HTMLCanvasElement;
+  private gl: WebGL2RenderingContext;
+  private prog: WebGLProgram;
+  private loc: (n: string) => WebGLUniformLocation | null;
+  readonly mode: number;
+
+  constructor(modeIdx: number, width = 1280, height = 800) {
+    this.mode = modeIdx;
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = width;
+    this.canvas.height = height;
+    const gl = this.canvas.getContext('webgl2', { preserveDrawingBuffer: true, antialias: false });
+    if (!gl) throw new Error('WebGL2 not available');
+    this.gl = gl;
+    const prog = gl.createProgram()!;
+    gl.attachShader(prog, compileShader(gl, gl.VERTEX_SHADER, VERT_SRC));
+    gl.attachShader(prog, compileShader(gl, gl.FRAGMENT_SHADER, FRAG_SRC));
+    gl.linkProgram(prog);
+    this.prog = prog;
+    gl.useProgram(prog);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    this.loc = (n: string) => gl.getUniformLocation(prog, n);
+    const p = MODE_PRESETS[modeIdx];
+    const pal = PALETTES[p.palette];
+    const u = this.loc;
+    gl.uniform2f(u('u_res'), width, height);
+    gl.uniform1f(u('u_seed'), p.seed);
+    gl.uniform1i(u('u_mode'), p.mode);
+    gl.uniform3fv(u('u_c1'), hexToRgb01(pal.colors[0]));
+    gl.uniform3fv(u('u_c2'), hexToRgb01(pal.colors[1]));
+    gl.uniform3fv(u('u_c3'), hexToRgb01(pal.colors[2]));
+    gl.uniform3fv(u('u_c4'), hexToRgb01(pal.colors[3]));
+    gl.uniform3fv(u('u_bg'), hexToRgb01(pal.bg));
+    const f = (n: string, v: number) => gl.uniform1f(u(n), v);
+    f('u_hue', p.hue); f('u_sat', p.sat); f('u_exposure', p.exposure); f('u_contrast', p.contrast);
+    f('u_scale', p.scale); f('u_complex', p.complex); f('u_warp', p.warp); f('u_flow', p.flow);
+    f('u_stretch', p.stretch); f('u_light', p.light); f('u_gloss', p.gloss); f('u_lightAngle', p.lightAngle);
+    f('u_irid', p.irid); f('u_glow', p.glow); f('u_grain', p.grain); f('u_cell', p.cell);
+    f('u_lines', p.lines); f('u_ca', p.ca); f('u_vig', p.vig); f('u_soft', p.soft); f('u_travel', p.travel);
+    this.render(0);
+  }
+
+  render(t: number) {
+    const gl = this.gl;
+    gl.useProgram(this.prog);
+    gl.uniform1f(this.loc('u_phase'), (MODE_PRESETS[this.mode].phase + t * 0.035) % 1);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  dispose() {
+    this.gl.getExtension('WEBGL_lose_context')?.loseContext();
+  }
+}
